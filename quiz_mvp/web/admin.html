@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>授權碼管理 · 公共工程品管題庫</title>
+<style>
+  body{margin:0;background:#eef1f5;color:#1c2530;font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;}
+  .wrap{max-width:840px;margin:0 auto;padding:24px 16px 60px;}
+  h1{font-size:20px;} h2{font-size:15px;margin:0 0 12px;}
+  .card{background:#fff;border:1px solid #e3e8ef;border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:0 8px 24px rgba(20,40,70,.08);}
+  label{display:block;font-size:13px;color:#6b7787;margin:10px 0 4px;}
+  input{width:100%;padding:10px 12px;border:1px solid #d7dee8;border-radius:10px;font-size:15px;box-sizing:border-box;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;} .row>div{flex:1;min-width:120px;}
+  button{margin-top:14px;background:#1f4e79;color:#fff;border:none;border-radius:10px;padding:12px 18px;font-size:15px;font-weight:600;cursor:pointer;}
+  button.sec{background:#eef3f9;color:#1f4e79;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+  th,td{text-align:left;padding:8px 6px;border-bottom:1px solid #eef1f5;}
+  th{color:#6b7787;font-weight:600;}
+  code{background:#f2f6fb;padding:3px 8px;border-radius:6px;font-size:14px;letter-spacing:.5px;}
+  .pill{font-size:11px;padding:3px 8px;border-radius:999px;}
+  .pill.free{background:#e6f6ec;color:#1f9d55;} .pill.used{background:#fbe9e9;color:#d64545;}
+  .muted{color:#6b7787;font-size:12px;} .err{color:#d64545;font-size:13px;margin-top:8px;}
+  .out{background:#0f1b2a;color:#d7f5ea;border-radius:10px;padding:12px;font-family:ui-monospace,Menlo,monospace;font-size:14px;white-space:pre-wrap;word-break:break-all;margin-top:12px;display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>授權碼管理</h1>
+  <p class="muted">此頁用來核發與查看授權碼。需要「管理金鑰」（在 Render 環境變數 <b>ADMIN_KEY</b> 設定的值）。金鑰只留在本頁記憶體，重新整理就要再輸入。</p>
+
+  <div class="card">
+    <h2>管理金鑰</h2>
+    <input id="key" type="password" placeholder="輸入 ADMIN_KEY" autocomplete="off">
+    <div class="muted" style="margin-top:6px">還沒設定？到 Render → 你的 Web Service → Environment → 新增 <code>ADMIN_KEY</code>，值自訂一組只有你知道的字串。</div>
+  </div>
+
+  <div class="card">
+    <h2>核發新授權碼</h2>
+    <div class="row">
+      <div><label>數量</label><input id="count" type="number" value="5" min="1" max="500"></div>
+      <div><label>使用天數（每碼）</label><input id="days" type="number" value="30" min="1"></div>
+      <div><label>備註（選填）</label><input id="note" type="text" placeholder="例如：7月團報"></div>
+    </div>
+    <button onclick="gen()">產生授權碼</button>
+    <div id="genErr" class="err"></div>
+    <div id="out" class="out"></div>
+  </div>
+
+  <div class="card">
+    <h2>已核發的授權碼 <button class="sec" style="margin:0 0 0 8px;padding:6px 12px;font-size:13px" onclick="load()">重新整理</button></h2>
+    <div id="listErr" class="err"></div>
+    <table id="tbl"><thead><tr><th>授權碼</th><th>天數</th><th>狀態</th><th>兌換時間</th><th>備註</th></tr></thead><tbody></tbody></table>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+function key(){return $('key').value.trim();}
+async function api(path, opts){
+  const r=await fetch('/api'+path,{headers:{'Content-Type':'application/json','X-Admin-Key':key()}, ...(opts||{})});
+  if(!r.ok){let m='';try{m=(await r.json()).detail||'';}catch(e){} throw new Error(m||('HTTP '+r.status));}
+  return r.json();
+}
+async function gen(){
+  $('genErr').textContent=''; $('out').style.display='none';
+  if(!key()){$('genErr').textContent='請先輸入管理金鑰';return;}
+  try{
+    const d=await api('/admin/codes',{method:'POST',body:JSON.stringify({count:+$('count').value,duration_days:+$('days').value,note:$('note').value||null})});
+    $('out').style.display='block';
+    $('out').textContent='新授權碼（每碼 '+d.duration_days+' 天）：\n\n'+d.codes.join('\n');
+    load();
+  }catch(e){$('genErr').textContent='產生失敗：'+e.message;}
+}
+async function load(){
+  $('listErr').textContent='';
+  if(!key()){$('listErr').textContent='請先輸入管理金鑰';return;}
+  try{
+    const d=await api('/admin/codes');
+    const tb=$('tbl').querySelector('tbody');
+    tb.innerHTML=d.codes.map(c=>`<tr>
+      <td><code>${c.code}</code></td>
+      <td>${c.duration_days} 天</td>
+      <td><span class="pill ${c.redeemed?'used':'free'}">${c.redeemed?'已兌換':'未使用'}</span></td>
+      <td>${c.redeemed_at?new Date(c.redeemed_at).toLocaleString():'—'}</td>
+      <td>${c.note||''}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">尚無授權碼</td></tr>';
+  }catch(e){$('listErr').textContent='讀取失敗：'+e.message;}
+}
+</script>
+</body>
+</html>

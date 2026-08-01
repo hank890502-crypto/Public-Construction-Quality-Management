@@ -246,9 +246,9 @@
           </div>
           <div class="card">
             <h2>選項</h2>
-            <div class="toggle"><span>打亂題目順序</span><div class="sw on" onclick="this.classList.toggle('on')"><i></i></div></div>
-            <div class="toggle"><span>打亂選項順序</span><div class="sw" onclick="this.classList.toggle('on')"><i></i></div></div>
-            <div class="toggle"><span>未作答優先</span><div class="sw on" onclick="this.classList.toggle('on')"><i></i></div></div>
+            <div class="toggle"><span>打亂題目順序</span><div class="sw on" id="swShuffleQ" onclick="this.classList.toggle('on')"><i></i></div></div>
+            <div class="toggle"><span>打亂選項順序</span><div class="sw" id="swShuffleOpt" onclick="this.classList.toggle('on')"><i></i></div></div>
+            <div class="toggle"><span>未作答優先</span><div class="sw on" id="swUnanswered" onclick="this.classList.toggle('on')"><i></i></div></div>
           </div>
           <button class="btn primary" style="width:100%;min-height:54px" onclick="startQuiz()">開始作答</button>
           <div style="height:10px"></div>
@@ -275,8 +275,16 @@
           </div>
           <div class="card">
             <h2>我的方案</h2>
-            <p style="margin:0;font-size:14px">年費會員 · 到期日 2027/07/31</p>
-            <p class="muted" style="font-size:13px;margin:8px 0 0">可用題庫：公共工程品管（機電）· 可看解析 · 可模擬考</p>
+            <div id="planBox"><p class="muted" style="font-size:14px;margin:0">讀取中…</p></div>
+            <div style="margin-top:14px">
+              <label style="font-size:13px;color:var(--muted)">輸入授權碼</label>
+              <div style="display:flex;gap:8px;margin-top:6px">
+                <input id="codeInput" placeholder="PQC-XXXX-XXXX" autocomplete="off"
+                  style="flex:1;min-height:46px;border:1px solid var(--line);border-radius:10px;padding:0 12px;font-size:15px;background:var(--card);color:var(--ink)">
+                <button class="btn primary" style="flex:0 0 92px;min-height:46px" onclick="doRedeem()">兌換</button>
+              </div>
+              <p id="redeemMsg" style="font-size:13px;margin:8px 0 0"></p>
+            </div>
           </div>
           <p class="muted" style="font-size:12px;text-align:center">公共工程品管題庫（機電）</p>
         </section>
@@ -328,8 +336,12 @@ let selChap=new Set(), chaptersLoaded=false;
 const MODE_MAP={instant:'practice',full:'full',mock:'mock',wrong:'wrong_review',read:'read'};
 const MODE_DESC={instant:"即時練習：每答完一題立即顯示對錯與解析。",full:"完整測驗：作答中不顯示答案，交卷後批改。",mock:"模擬考：固定題數與時間，時間到自動交卷。",wrong:"錯題複習：僅出現先前答錯的題目。",read:"閱讀背題：直接顯示題目與答案。"};
 
+function clientToken(){
+  try{ let t=localStorage.getItem('cid'); if(!t){ t=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('t'+Date.now()+'-'+Math.random().toString(16).slice(2)); localStorage.setItem('cid',t);} return t; }
+  catch(e){ return 'anon'; }
+}
 async function api(path, opts){
-  const r = await fetch('/api'+path, {headers:{'Content-Type':'application/json'}, ...(opts||{})});
+  const r = await fetch('/api'+path, {headers:{'Content-Type':'application/json','X-Client-Token':clientToken()}, ...(opts||{})});
   if(!r.ok){ let t=''; try{t=(await r.json()).detail||'';}catch(e){} throw new Error(t||('HTTP '+r.status)); }
   return r.json();
 }
@@ -343,6 +355,7 @@ function go(s){
   document.getElementById('scroll').scrollTop=0;
   if(timer&&s!=='quiz'){clearInterval(timer);timer=null;}
   if(s==='wrong') loadWrong();
+  if(s==='me') renderPlan();
   if(s==='home') renderHome();
   if((s==='home'||s==='setup')&&!chaptersLoaded) renderChapters();
 }
@@ -373,14 +386,20 @@ async function startQuiz(fromWrong){
   go('quiz');
   document.getElementById('quizScreen').innerHTML='<div style="padding:60px 20px;text-align:center" class="muted">載入題目中…</div>';
   try{
-    const d=await api('/sessions',{method:'POST',body:JSON.stringify({count,mode,chapter_ids:selChap.size?[...selChap]:null})});
+    const on=id=>{const el=document.getElementById(id);return el?el.classList.contains('on'):false;};
+    const d=await api('/sessions',{method:'POST',body:JSON.stringify({count,mode,chapter_ids:selChap.size?[...selChap]:null,
+      shuffle_questions:on('swShuffleQ'),shuffle_options:on('swShuffleOpt'),unanswered_first:on('swUnanswered')})});
     SID=d.session_id;
     Q=d.questions.map(q=>({item_id:q.item_id,no:q.no,chapter:q.chapter,stem:q.stem,
       opts:Object.fromEntries((q.options||[]).map(o=>[o.label,o.content])),
       picked:undefined,ans:null,exp:null,fav:false,flag:false}));
     idx=0; renderQuiz(); toast('已載入 '+Q.length+' 題');
     if(mode==='mock'){timeLeft=40*60;startTimer();}
-  }catch(e){document.getElementById('quizScreen').innerHTML='<div style="padding:50px 20px" class="muted">無法建立作答：'+e.message+'</div>';}
+  }catch(e){
+    const gate=(''+e.message).indexOf('授權')>=0;
+    const msg=gate?e.message:('無法建立作答：'+e.message);
+    document.getElementById('quizScreen').innerHTML='<div style="padding:50px 24px;text-align:center" class="muted">'+msg+(gate?'<br><br><button class="btn primary" style="max-width:240px;margin:0 auto" onclick="go(\'me\')">前往「我的」輸入授權碼</button>':'')+'</div>';
+  }
 }
 function startTimer(){clearInterval(timer);timer=setInterval(()=>{timeLeft--;const m=String(Math.floor(timeLeft/60)).padStart(2,'0'),s=String(timeLeft%60).padStart(2,'0');const t=document.getElementById('timer');if(t)t.textContent=m+':'+s;if(timeLeft<=0){clearInterval(timer);openSubmit(true);}},1000);}
 
@@ -515,6 +534,31 @@ async function renderHome(){
     const bar=document.getElementById('homeBar'); if(bar) bar.style.width=(s.total?Math.round((s.answered||0)/s.total*100):0)+'%';
     set('wrongCount',(s.wrong||0));
   }catch(e){}
+}
+async function renderPlan(){
+  const box=document.getElementById('planBox'); if(!box) return;
+  try{
+    const p=await api('/plan');
+    if(p.active){
+      const d=p.expires_at?new Date(p.expires_at):null;
+      box.innerHTML='<p style="margin:0;font-size:15px;font-weight:700">使用中 · 剩 '+(p.days_left??0)+' 天</p>'+
+        '<p class="muted" style="font-size:13px;margin:6px 0 0">到期日 '+(d?d.toLocaleDateString():'—')+'　可看解析 · 可模擬考</p>';
+    }else{
+      box.innerHTML='<p style="margin:0;font-size:15px;font-weight:700;color:var(--bad)">授權已到期</p>'+
+        '<p class="muted" style="font-size:13px;margin:6px 0 0">輸入授權碼即可繼續使用；你的錯題與作答紀錄都會保留。</p>';
+    }
+  }catch(e){ box.innerHTML='<p class="muted" style="font-size:13px;margin:0">無法讀取方案：'+e.message+'</p>'; }
+}
+async function doRedeem(){
+  const msg=document.getElementById('redeemMsg'); const code=document.getElementById('codeInput').value.trim();
+  if(!code){ msg.style.color='var(--bad)'; msg.textContent='請輸入授權碼'; return; }
+  msg.style.color='var(--muted)'; msg.textContent='兌換中…';
+  try{
+    const r=await api('/redeem',{method:'POST',body:JSON.stringify({code})});
+    msg.style.color='var(--ok)';
+    msg.textContent='兌換成功！有效至 '+(r.expires_at?new Date(r.expires_at).toLocaleDateString():'—')+'（剩 '+(r.days_left??0)+' 天）';
+    document.getElementById('codeInput').value=''; renderPlan(); renderHome();
+  }catch(e){ msg.style.color='var(--bad)'; msg.textContent='兌換失敗：'+e.message; }
 }
 renderChapters(); renderHome();
 
