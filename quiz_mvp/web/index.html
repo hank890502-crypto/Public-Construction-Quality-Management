@@ -29,7 +29,30 @@
   @media(min-width:820px){
     body{background:#e5e9f0;}
     .stage{display:flex;justify-content:center;}
-    .device{max-width:760px;box-shadow:0 0 0 1px var(--line),0 24px 70px rgba(20,40,70,.14);}
+    .device{width:min(1200px,94vw);max-width:none;box-shadow:0 0 0 1px var(--line),0 24px 70px rgba(20,40,70,.14);}
+    /* 文字與元件隨視窗寬度縮放（clamp 設上限，避免超寬螢幕過大）*/
+    .topbar h1{font-size:clamp(16px,1.5vw,26px);}
+    .topbar .sub{font-size:clamp(11px,0.9vw,15px);}
+    .scroll{padding:clamp(16px,1.8vw,32px) clamp(14px,1.8vw,32px) 96px;}
+    .card{padding:clamp(16px,1.6vw,26px);border-radius:18px;}
+    .card h2{font-size:clamp(15px,1.15vw,22px);}
+    .ring{width:clamp(84px,7vw,120px);height:clamp(84px,7vw,120px);}
+    .ring i{width:76%;height:76%;} .ring b{font-size:clamp(20px,1.7vw,30px);}
+    .stat .big{font-size:clamp(22px,2vw,34px);}
+    .quick button{min-height:clamp(56px,5vw,84px);font-size:clamp(14px,1.05vw,19px);}
+    .quick button .k{font-size:clamp(11px,0.85vw,14px);}
+    .chapter .name{font-size:clamp(14px,1.05vw,19px);} .chapter .name small{font-size:clamp(11px,0.8vw,13px);}
+    .pct{font-size:clamp(12px,0.95vw,16px);}
+    .seg button{font-size:clamp(13px,1vw,17px);min-height:clamp(46px,3.4vw,58px);}
+    .chip{font-size:clamp(13px,1vw,16px);min-height:clamp(40px,3vw,52px);}
+    .stepper .val,.stepper input{font-size:clamp(24px,2vw,32px);}
+    .stepper button{width:clamp(46px,4vw,60px);height:clamp(46px,4vw,60px);font-size:clamp(22px,1.8vw,30px);}
+    .btn{font-size:clamp(15px,1.1vw,19px);}
+    .qmeta .no{font-size:clamp(15px,1.2vw,20px);}
+    .tabbar button{font-size:clamp(11px,0.85vw,14px);} .tabbar .ic{font-size:clamp(19px,1.5vw,24px);}
+    .kpi b{font-size:clamp(20px,1.7vw,28px);}
+    .score-ring{width:clamp(150px,14vw,220px);height:clamp(150px,14vw,220px);}
+    .score-ring i{width:80%;height:80%;} .score-ring b{font-size:clamp(38px,3.4vw,56px);}
   }
 
   /* ---- app chrome ---- */
@@ -239,7 +262,7 @@
             <h2>題數</h2>
             <div class="stepper">
               <button onclick="stepCount(-5)">−</button>
-              <div class="val" id="countVal">20</div>
+              <input class="val" id="countVal" type="number" inputmode="numeric" min="1" max="100" value="20" onchange="clampCount()" style="width:96px;height:46px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)">
               <button onclick="stepCount(5)">＋</button>
               <span class="muted" style="font-size:13px">題 · 常見 20–50</span>
             </div>
@@ -377,12 +400,14 @@ async function renderChapters(){
   }catch(e){document.getElementById('chapters').innerHTML='<p class="muted" style="font-size:13px">無法連線後端：'+e.message+'</p>';}
 }
 function toggleChip(el){el.classList.toggle('on');const id=el.dataset.id;if(selChap.has(id))selChap.delete(id);else selChap.add(id);}
-function stepCount(d){let v=parseInt(document.getElementById('countVal').textContent)||20;v=Math.max(5,Math.min(100,v+d));document.getElementById('countVal').textContent=v;}
+function countEl(){return document.getElementById('countVal');}
+function clampCount(){let v=parseInt(countEl().value)||20;v=Math.max(1,Math.min(100,v));countEl().value=v;return v;}
+function stepCount(d){let v=parseInt(countEl().value)||20;v=Math.max(1,Math.min(100,v+d));countEl().value=v;}
 function startMock(){curMode='mock';go('setup');document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('on',x.dataset.mode==='mock'));document.getElementById('modeDesc').textContent=MODE_DESC.mock;}
 
 async function startQuiz(fromWrong){
   mode = fromWrong ? 'wrong_review' : curMode;
-  const count = parseInt(document.getElementById('countVal').textContent)||20;
+  const count = clampCount();
   go('quiz');
   document.getElementById('quizScreen').innerHTML='<div style="padding:60px 20px;text-align:center" class="muted">載入題目中…</div>';
   try{
@@ -406,7 +431,7 @@ function startTimer(){clearInterval(timer);timer=setInterval(()=>{timeLeft--;con
 function renderQuiz(){
   const q=Q[idx]; const reveal=(mode==='practice'||mode==='wrong_review'||mode==='read');
   const graded=q.picked!==undefined && reveal && q.ans!==null;
-  const fs=17+fontStep*2;
+  const fs=quizBase()+fontStep*2;
   const optHtml=Object.entries(q.opts).map(([k,v])=>{
     let cls='opt';
     if(graded){ if(k===q.ans)cls+=' correct'; else if(k===q.picked)cls+=' wrong'; }
@@ -560,6 +585,8 @@ async function doRedeem(){
     document.getElementById('codeInput').value=''; renderPlan(); renderHome();
   }catch(e){ msg.style.color='var(--bad)'; msg.textContent='兌換失敗：'+e.message; }
 }
+function quizBase(){ return Math.max(17, Math.min(24, Math.round(17 + (window.innerWidth-820)/170))); }
+let _rz; window.addEventListener('resize', ()=>{ clearTimeout(_rz); _rz=setTimeout(()=>{ const a=document.querySelector('.screen.active'); if(a && a.dataset.screen==='quiz') renderQuiz(); }, 150); });
 renderChapters(); renderHome();
 
 </script>
