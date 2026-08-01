@@ -1,0 +1,22 @@
+# Render 藍圖：一鍵建立「Web 服務 + 託管 PostgreSQL」
+# 用法：把本專案推到 GitHub → Render → New → Blueprint → 選此 repo → Apply
+databases:
+  - name: quiz-db
+    plan: free
+    databaseName: quizdb
+    user: quiz
+
+services:
+  - type: web
+    name: quiz-mvp
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: quiz-db
+          property: connectionString
+      - key: PORT
+        value: "8000"

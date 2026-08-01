@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f4e79">
+<title>公共工程品管題庫（機電）· 手機版線稿</title>
+<style>
+  :root{
+    --bg:#eef1f5; --card:#ffffff; --ink:#1c2530; --muted:#6b7787; --line:#e3e8ef;
+    --brand:#1f4e79; --brand-2:#2f6fb0; --accent:#0f9d8b;
+    --ok:#1f9d55; --ok-bg:#e6f6ec; --bad:#d64545; --bad-bg:#fbe9e9;
+    --chip:#eef3f9; --shadow:0 8px 24px rgba(20,40,70,.10);
+    --r:16px; --tap:56px;
+  }
+  html[data-theme="dark"]{
+    --bg:#0f141a; --card:#182029; --ink:#e6ecf3; --muted:#9aa7b5; --line:#26313d;
+    --brand:#4f8fd0; --brand-2:#5fa0e0; --accent:#2fd3bd;
+    --chip:#1f2a35; --ok-bg:#12261a; --bad-bg:#2a1616; --shadow:0 8px 24px rgba(0,0,0,.4);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  /* desktop: show a phone frame; mobile: fill screen */
+  .stage{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:0;}
+  .device{position:relative;width:100%;max-width:100%;height:100vh;background:var(--bg);
+    display:flex;flex-direction:column;overflow:hidden;}
+  @media(min-width:700px){
+    .stage{padding:28px;}
+    .device{max-width:400px;height:840px;border-radius:44px;box-shadow:var(--shadow),0 0 0 12px #0b0f14,0 0 0 14px #222c38;
+      overflow:hidden;}
+    .device::before{content:"";position:absolute;top:10px;left:50%;transform:translateX(-50%);
+      width:130px;height:26px;background:#0b0f14;border-radius:0 0 18px 18px;z-index:60;}
+    .frame-note{position:fixed;left:24px;bottom:20px;color:var(--muted);font-size:12px;max-width:230px;line-height:1.5;}
+  }
+  @media(max-width:699px){ .frame-note{display:none;} }
+
+  /* ---- app chrome ---- */
+  .app{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;background:var(--bg);}
+  .topbar{background:var(--brand);color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 16px 12px;
+    display:flex;align-items:center;gap:10px;z-index:20;}
+  .topbar h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.3px;flex:1;}
+  .topbar .sub{font-size:11px;opacity:.85;font-weight:400;}
+  .icon-btn{width:38px;height:38px;border:none;background:rgba(255,255,255,.15);color:#fff;border-radius:12px;
+    display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;}
+  .scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:16px 14px 90px;}
+  .screen{display:none;} .screen.active{display:block;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px;box-shadow:var(--shadow);}
+  .card h2{margin:0 0 12px;font-size:15px;} .muted{color:var(--muted);}
+  .row{display:flex;align-items:center;gap:12px;}
+
+  /* progress ring */
+  .ring-wrap{display:flex;align-items:center;gap:16px;}
+  .ring{--p:0;width:84px;height:84px;border-radius:50%;flex:none;
+    background:conic-gradient(var(--accent) calc(var(--p)*1%), var(--line) 0);
+    display:flex;align-items:center;justify-content:center;}
+  .ring i{width:64px;height:64px;border-radius:50%;background:var(--card);display:flex;flex-direction:column;
+    align-items:center;justify-content:center;font-style:normal;}
+  .ring b{font-size:20px;} .ring span{font-size:10px;color:var(--muted);}
+  .stat{flex:1;} .stat .big{font-size:22px;font-weight:700;} .stat small{color:var(--muted);}
+
+  .quick{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+  .quick button{min-height:var(--tap);border:1px solid var(--line);background:var(--card);border-radius:14px;
+    font-size:14px;font-weight:600;color:var(--ink);display:flex;flex-direction:column;align-items:flex-start;
+    justify-content:center;gap:2px;padding:10px 14px;cursor:pointer;box-shadow:var(--shadow);}
+  .quick button .k{font-size:11px;color:var(--muted);font-weight:500;}
+  .quick .primary{background:var(--brand);color:#fff;border-color:var(--brand);}
+  .quick .primary .k{color:rgba(255,255,255,.8);}
+
+  .chapter{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);cursor:pointer;}
+  .chapter:last-child{border-bottom:none;}
+  .chapter .name{flex:1;font-size:14px;} .chapter .name small{display:block;color:var(--muted);font-size:11px;margin-top:3px;}
+  .bar{height:6px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:6px;}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:6px;}
+  .pct{font-size:12px;color:var(--muted);width:34px;text-align:right;}
+
+  /* setup */
+  .seg{display:flex;flex-wrap:wrap;gap:8px;}
+  .seg button{flex:1 1 auto;min-height:46px;border:1px solid var(--line);background:var(--card);border-radius:12px;
+    font-size:13px;color:var(--ink);cursor:pointer;padding:6px 10px;}
+  .seg button.on{background:var(--brand);color:#fff;border-color:var(--brand);font-weight:600;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{min-height:40px;padding:8px 14px;border-radius:999px;border:1px solid var(--line);background:var(--chip);
+    font-size:13px;cursor:pointer;display:flex;align-items:center;}
+  .chip.on{background:var(--brand-2);color:#fff;border-color:var(--brand-2);}
+  .stepper{display:flex;align-items:center;gap:14px;}
+  .stepper button{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--card);
+    font-size:22px;cursor:pointer;color:var(--ink);}
+  .stepper .val{font-size:26px;font-weight:700;min-width:56px;text-align:center;}
+  .toggle{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);}
+  .toggle:last-child{border-bottom:none;} .toggle span{font-size:14px;}
+  .sw{width:50px;height:30px;border-radius:999px;background:var(--line);position:relative;cursor:pointer;transition:.2s;flex:none;}
+  .sw i{position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.3);}
+  .sw.on{background:var(--accent);} .sw.on i{left:23px;}
+
+  /* answering */
+  .quiz-top{background:var(--card);border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top) + 10px) 12px 10px;position:relative;z-index:15;}
+  .pbar{height:6px;background:var(--line);border-radius:6px;overflow:hidden;}
+  .pbar i{display:block;height:100%;background:var(--brand);transition:width .3s;}
+  .qmeta{display:flex;align-items:center;gap:8px;margin-top:10px;}
+  .qmeta .no{font-weight:700;font-size:15px;} .tag{font-size:11px;background:var(--chip);color:var(--muted);padding:4px 8px;border-radius:8px;}
+  .qmeta .spacer{flex:1;}
+  .timer{font-size:13px;font-weight:700;color:var(--brand);font-variant-numeric:tabular-nums;}
+  .saved{font-size:11px;color:var(--ok);display:flex;align-items:center;gap:4px;}
+  .saved b{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block;}
+  .fontctl{display:flex;gap:6px;}
+  .fontctl button{width:34px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--card);cursor:pointer;color:var(--ink);}
+
+  .qbody{padding:18px 16px 16px;}
+  .stem{font-size:var(--qfs,17px);line-height:1.7;font-weight:600;margin-bottom:18px;}
+  .opt{display:flex;gap:12px;align-items:flex-start;min-height:var(--tap);width:100%;text-align:left;
+    border:1.5px solid var(--line);background:var(--card);border-radius:14px;padding:14px 14px;margin-bottom:12px;
+    font-size:calc(var(--qfs,17px) - 2px);color:var(--ink);cursor:pointer;transition:.15s;line-height:1.5;}
+  .opt .lb{width:28px;height:28px;flex:none;border-radius:50%;border:1.5px solid var(--line);display:flex;
+    align-items:center;justify-content:center;font-weight:700;font-size:14px;color:var(--muted);}
+  .opt.sel{border-color:var(--brand);background:color-mix(in srgb,var(--brand) 8%,var(--card));}
+  .opt.sel .lb{background:var(--brand);color:#fff;border-color:var(--brand);}
+  .opt.correct{border-color:var(--ok);background:var(--ok-bg);} .opt.correct .lb{background:var(--ok);color:#fff;border-color:var(--ok);}
+  .opt.wrong{border-color:var(--bad);background:var(--bad-bg);} .opt.wrong .lb{background:var(--bad);color:#fff;border-color:var(--bad);}
+  .exp{background:var(--chip);border-radius:14px;padding:14px;font-size:14px;line-height:1.7;display:none;}
+  .exp.show{display:block;animation:fade .2s;} .exp .h{font-weight:700;margin-bottom:6px;color:var(--brand);}
+  .exp .ai{display:inline-block;font-size:10px;background:#ffe9c7;color:#8a5a00;padding:2px 7px;border-radius:6px;margin-left:6px;}
+  html[data-theme="dark"] .exp .ai{background:#4a3410;color:#ffd591;}
+
+  .quiz-bottom{border-top:1px solid var(--line);background:var(--card);padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);
+    display:flex;gap:8px;align-items:center;z-index:15;}
+  .tool{width:46px;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--card);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:18px;}
+  .tool.on{color:#e8a13a;border-color:#e8a13a;} .tool.flag.on{color:var(--bad);border-color:var(--bad);}
+  .btn{flex:1;min-height:48px;border-radius:12px;border:none;font-size:15px;font-weight:700;cursor:pointer;}
+  .btn.ghost{background:var(--chip);color:var(--ink);flex:0 0 92px;}
+  .btn.primary{background:var(--brand);color:#fff;}
+  .btn:disabled{opacity:.45;}
+
+  /* nav drawer */
+  .sheet-mask{position:absolute;inset:0;background:rgba(10,20,35,.45);display:none;z-index:40;}
+  .sheet-mask.show{display:block;}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--card);border-radius:20px 20px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom) + 18px);
+    transform:translateY(100%);transition:.25s;z-index:50;}
+  .sheet.show{transform:none;}
+  .sheet h3{margin:0 0 14px;font-size:15px;}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+  .gcell{aspect-ratio:1;border-radius:12px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-weight:700;cursor:pointer;background:var(--card);}
+  .gcell.done{background:var(--brand);color:#fff;border-color:var(--brand);}
+  .gcell.flagged{border-color:var(--bad);color:var(--bad);}
+  .gcell.cur{outline:3px solid var(--accent);outline-offset:1px;}
+  .legend{display:flex;gap:16px;margin-top:14px;font-size:12px;color:var(--muted);flex-wrap:wrap;}
+  .legend b{display:inline-block;width:12px;height:12px;border-radius:4px;vertical-align:-1px;margin-right:5px;}
+
+  /* result */
+  .score-ring{--p:0;width:150px;height:150px;border-radius:50%;margin:6px auto 16px;
+    background:conic-gradient(var(--accent) calc(var(--p)*1%), var(--line) 0);display:flex;align-items:center;justify-content:center;}
+  .score-ring i{width:120px;height:120px;border-radius:50%;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;font-style:normal;}
+  .score-ring b{font-size:38px;line-height:1;} .score-ring span{font-size:12px;color:var(--muted);margin-top:4px;}
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;text-align:center;margin-bottom:6px;}
+  .kpi{background:var(--chip);border-radius:12px;padding:12px 6px;} .kpi b{font-size:20px;display:block;} .kpi small{color:var(--muted);}
+  .pass{font-weight:800;font-size:16px;padding:4px 12px;border-radius:999px;display:inline-block;}
+  .pass.ok{background:var(--ok-bg);color:var(--ok);} .pass.no{background:var(--bad-bg);color:var(--bad);}
+
+  .wrong-item{display:flex;gap:10px;padding:12px 0;border-bottom:1px solid var(--line);}
+  .wrong-item:last-child{border-bottom:none;}
+  .wrong-item .badge{flex:none;width:30px;height:30px;border-radius:8px;background:var(--bad-bg);color:var(--bad);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px;}
+  .wrong-item .t{font-size:13px;line-height:1.5;flex:1;} .wrong-item .t small{color:var(--muted);}
+
+  /* bottom nav */
+  .tabbar{display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom);z-index:20;}
+  .tabbar button{flex:1;background:none;border:none;padding:8px 0 10px;color:var(--muted);font-size:11px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;}
+  .tabbar button.on{color:var(--brand);} .tabbar .ic{font-size:19px;line-height:1;}
+  .hide{display:none !important;}
+  .toast{position:absolute;bottom:84px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:#111c28;color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;transition:.25s;z-index:70;white-space:nowrap;}
+  .toast.show{opacity:1;transform:translateX(-50%);}
+  .demo-flag{font-size:10px;background:var(--accent);color:#04231f;padding:2px 7px;border-radius:6px;font-weight:700;}
+  html[data-theme="dark"] .demo-flag{color:#04231f;}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="device">
+    <div class="app">
+      <!-- ===== top bar (hidden during quiz/result) ===== -->
+      <div class="topbar" id="topbar">
+        <div style="flex:1">
+          <h1>公共工程品管題庫 <span class="demo-flag">機電</span></h1>
+          <div class="sub">115 年 1 月起適用 · 共 2,538 題</div>
+        </div>
+        <button class="icon-btn" onclick="toggleTheme()" title="深色模式" id="themeBtn">☾</button>
+      </div>
+
+      <!-- ===== scrollable body ===== -->
+      <div class="scroll" id="scroll">
+
+        <!-- HOME -->
+        <section class="screen active" data-screen="home">
+          <div class="card">
+            <div class="ring-wrap">
+              <div class="ring" style="--p:42"><i><b>42%</b><span>整體正確率</span></i></div>
+              <div class="stat">
+                <div class="big">1,066 <small>/ 2,538 題已作答</small></div>
+                <div class="muted" style="font-size:13px;margin-top:6px">錯題 168 · 收藏 37 · 連續學習 6 天</div>
+                <div class="bar" style="margin-top:10px"><i style="width:42%"></i></div>
+              </div>
+            </div>
+          </div>
+          <div class="quick">
+            <button class="primary" onclick="go('setup')"><span class="k">上次到第 3 章</span>繼續作答 ▸</button>
+            <button onclick="go('setup')"><span class="k">自訂章節與題數</span>開始練習</button>
+            <button onclick="startMock()"><span class="k">固定題數／時間</span>模擬考</button>
+            <button onclick="go('wrong')"><span class="k">168 題待複習</span>錯題複習</button>
+          </div>
+          <div class="card">
+            <h2>章節進度</h2>
+            <div id="chapters"></div>
+          </div>
+          <p class="muted" style="font-size:12px;text-align:center">此為手機版 UI 線稿，數據為示範用途</p>
+        </section>
+
+        <!-- SETUP -->
+        <section class="screen" data-screen="setup">
+          <div class="card">
+            <h2>作答模式</h2>
+            <div class="seg" id="modeSeg">
+              <button class="on" data-mode="instant">即時練習</button>
+              <button data-mode="full">完整測驗</button>
+              <button data-mode="mock">模擬考</button>
+              <button data-mode="wrong">錯題複習</button>
+              <button data-mode="read">閱讀背題</button>
+            </div>
+            <p class="muted" id="modeDesc" style="font-size:13px;margin:12px 0 0">即時練習：每答完一題立即顯示對錯與解析。</p>
+          </div>
+          <div class="card">
+            <h2>選擇章節</h2>
+            <div class="chips" id="chapChips"></div>
+          </div>
+          <div class="card">
+            <h2>題數</h2>
+            <div class="stepper">
+              <button onclick="stepCount(-5)">−</button>
+              <div class="val" id="countVal">20</div>
+              <button onclick="stepCount(5)">＋</button>
+              <span class="muted" style="font-size:13px">題 · 常見 20–50</span>
+            </div>
+          </div>
+          <div class="card">
+            <h2>選項</h2>
+            <div class="toggle"><span>打亂題目順序</span><div class="sw on" onclick="this.classList.toggle('on')"><i></i></div></div>
+            <div class="toggle"><span>打亂選項順序</span><div class="sw" onclick="this.classList.toggle('on')"><i></i></div></div>
+            <div class="toggle"><span>未作答優先</span><div class="sw on" onclick="this.classList.toggle('on')"><i></i></div></div>
+          </div>
+          <button class="btn primary" style="width:100%;min-height:54px" onclick="startQuiz()">開始作答（示範載入 5 題）</button>
+          <div style="height:10px"></div>
+          <button class="btn ghost" style="width:100%;min-height:46px;flex:none" onclick="go('home')">返回</button>
+        </section>
+
+        <!-- WRONG BOOK -->
+        <section class="screen" data-screen="wrong">
+          <div class="card">
+            <h2>錯題本 <span class="muted" style="font-weight:400;font-size:13px">· 168 題</span></h2>
+            <div id="wrongList"></div>
+          </div>
+          <button class="btn primary" style="width:100%;min-height:52px" onclick="startQuiz(true)">開始複習錯題</button>
+        </section>
+
+        <!-- ME -->
+        <section class="screen" data-screen="me">
+          <div class="card">
+            <h2>我的</h2>
+            <div class="toggle"><span>深色模式</span><div class="sw" id="themeSw" onclick="toggleTheme()"><i></i></div></div>
+            <div class="toggle"><span>作答自動儲存</span><div class="sw on"><i></i></div></div>
+            <div class="toggle"><span>推播通知（PWA / LINE）</span><div class="sw on"><i></i></div></div>
+            <div class="toggle"><span>同時登入裝置：手機＋電腦</span><span class="muted" style="font-size:13px">2 / 2</span></div>
+          </div>
+          <div class="card">
+            <h2>我的方案</h2>
+            <p style="margin:0;font-size:14px">年費會員 · 到期日 2027/07/31</p>
+            <p class="muted" style="font-size:13px;margin:8px 0 0">可用題庫：公共工程品管（機電）· 可看解析 · 可模擬考</p>
+          </div>
+          <p class="muted" style="font-size:12px;text-align:center">手機版 UI 線稿 · 示範資料</p>
+        </section>
+
+        <!-- QUIZ -->
+        <section class="screen" data-screen="quiz" id="quizScreen"></section>
+
+        <!-- RESULT -->
+        <section class="screen" data-screen="result" id="resultScreen"></section>
+      </div>
+
+      <!-- ===== bottom tab bar ===== -->
+      <nav class="tabbar" id="tabbar">
+        <button class="on" data-tab="home" onclick="go('home')"><span class="ic">☗</span>首頁</button>
+        <button data-tab="setup" onclick="go('setup')"><span class="ic">✎</span>練習</button>
+        <button data-tab="wrong" onclick="go('wrong')"><span class="ic">✗</span>錯題</button>
+        <button data-tab="me" onclick="go('me')"><span class="ic">☺</span>我的</button>
+      </nav>
+
+      <!-- nav sheet + confirm sheet + toast -->
+      <div class="sheet-mask" id="mask" onclick="closeSheets()"></div>
+      <div class="sheet" id="navSheet">
+        <h3>題目導覽</h3>
+        <div class="grid" id="navGrid"></div>
+        <div class="legend">
+          <span><b style="background:var(--brand)"></b>已作答</span>
+          <span><b style="background:var(--card);border:1px solid var(--line)"></b>未作答</span>
+          <span><b style="background:var(--card);border:1px solid var(--bad)"></b>已標記</span>
+        </div>
+      </div>
+      <div class="sheet" id="submitSheet">
+        <h3>確定要交卷嗎？</h3>
+        <p class="muted" id="submitInfo" style="font-size:14px;margin:0 0 16px"></p>
+        <button class="btn primary" style="width:100%;min-height:50px" onclick="doSubmit()">確定交卷</button>
+        <div style="height:10px"></div>
+        <button class="btn ghost" style="width:100%;min-height:46px;flex:none" onclick="closeSheets()">再檢查一下</button>
+      </div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+  <div class="frame-note">題庫 MVP（前端＋FastAPI＋PostgreSQL）。題目即時從資料庫載入；點選項即時批改並顯示解析。</div>
+</div>
+
+<script>
+/* ===== 題庫 MVP 前端邏輯（呼叫 /api，取真實題目）===== */
+let SID=null, Q=[], idx=0, fontStep=0, timer=null, timeLeft=40*60, mode='practice', curMode='practice';
+let selChap=new Set(), chaptersLoaded=false;
+const MODE_MAP={instant:'practice',full:'full',mock:'mock',wrong:'wrong_review',read:'read'};
+const MODE_DESC={instant:"即時練習：每答完一題立即顯示對錯與解析。",full:"完整測驗：作答中不顯示答案，交卷後批改。",mock:"模擬考：固定題數與時間，時間到自動交卷。",wrong:"錯題複習：僅出現先前答錯的題目。",read:"閱讀背題：直接顯示題目與答案。"};
+
+async function api(path, opts){
+  const r = await fetch('/api'+path, {headers:{'Content-Type':'application/json'}, ...(opts||{})});
+  if(!r.ok){ let t=''; try{t=(await r.json()).detail||'';}catch(e){} throw new Error(t||('HTTP '+r.status)); }
+  return r.json();
+}
+
+function go(s){
+  document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===s));
+  document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===s));
+  const quiz=(s==='quiz'||s==='result');
+  document.getElementById('topbar').classList.toggle('hide',quiz);
+  document.getElementById('tabbar').classList.toggle('hide',quiz);
+  document.getElementById('scroll').scrollTop=0;
+  if(timer&&s!=='quiz'){clearInterval(timer);timer=null;}
+  if(s==='wrong') loadWrong();
+  if((s==='home'||s==='setup')&&!chaptersLoaded) renderChapters();
+}
+function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),1800);}
+function toggleTheme(){const h=document.documentElement,d=h.getAttribute('data-theme')==='dark';h.setAttribute('data-theme',d?'light':'dark');document.getElementById('themeBtn').textContent=d?'☾':'☀';const sw=document.getElementById('themeSw');if(sw)sw.classList.toggle('on',!d);}
+
+async function renderChapters(){
+  try{
+    const d=await api('/chapters');
+    let html='',chips='';
+    d.units.forEach(u=>u.chapters.forEach(c=>{
+      const short=c.chapter.replace(/^第.章\s*/,'');
+      html+=`<div class="chapter" onclick="go('setup')"><div class="name">${u.unit}·${short}<small>${c.count} 題</small></div><div class="pct">${c.count}</div></div>`;
+      chips+=`<div class="chip" data-id="${c.chapter_id}" onclick="toggleChip(this)">${short}</div>`;
+    }));
+    document.getElementById('chapters').innerHTML=html;
+    document.getElementById('chapChips').innerHTML=chips;
+    chaptersLoaded=true;
+  }catch(e){document.getElementById('chapters').innerHTML='<p class="muted" style="font-size:13px">無法連線後端：'+e.message+'</p>';}
+}
+function toggleChip(el){el.classList.toggle('on');const id=el.dataset.id;if(selChap.has(id))selChap.delete(id);else selChap.add(id);}
+function stepCount(d){let v=parseInt(document.getElementById('countVal').textContent)||20;v=Math.max(5,Math.min(100,v+d));document.getElementById('countVal').textContent=v;}
+function startMock(){curMode='mock';go('setup');document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.toggle('on',x.dataset.mode==='mock'));document.getElementById('modeDesc').textContent=MODE_DESC.mock;}
+
+async function startQuiz(fromWrong){
+  mode = fromWrong ? 'wrong_review' : curMode;
+  const count = parseInt(document.getElementById('countVal').textContent)||20;
+  go('quiz');
+  document.getElementById('quizScreen').innerHTML='<div style="padding:60px 20px;text-align:center" class="muted">載入題目中…</div>';
+  try{
+    const d=await api('/sessions',{method:'POST',body:JSON.stringify({count,mode,chapter_ids:selChap.size?[...selChap]:null})});
+    SID=d.session_id;
+    Q=d.questions.map(q=>({item_id:q.item_id,no:q.no,chapter:q.chapter,stem:q.stem,
+      opts:Object.fromEntries((q.options||[]).map(o=>[o.label,o.content])),
+      picked:undefined,ans:null,exp:null,fav:false,flag:false}));
+    idx=0; renderQuiz(); toast('已載入 '+Q.length+' 題真實題目');
+    if(mode==='mock'){timeLeft=40*60;startTimer();}
+  }catch(e){document.getElementById('quizScreen').innerHTML='<div style="padding:50px 20px" class="muted">無法建立作答：'+e.message+'</div>';}
+}
+function startTimer(){clearInterval(timer);timer=setInterval(()=>{timeLeft--;const m=String(Math.floor(timeLeft/60)).padStart(2,'0'),s=String(timeLeft%60).padStart(2,'0');const t=document.getElementById('timer');if(t)t.textContent=m+':'+s;if(timeLeft<=0){clearInterval(timer);openSubmit(true);}},1000);}
+
+function renderQuiz(){
+  const q=Q[idx]; const reveal=(mode==='practice'||mode==='wrong_review'||mode==='read');
+  const graded=q.picked!==undefined && reveal && q.ans!==null;
+  const fs=17+fontStep*2;
+  const optHtml=Object.entries(q.opts).map(([k,v])=>{
+    let cls='opt';
+    if(graded){ if(k===q.ans)cls+=' correct'; else if(k===q.picked)cls+=' wrong'; }
+    else if(k===q.picked)cls+=' sel';
+    return `<button class="${cls}" onclick="pick('${k}')"><span class="lb">${k}</span><span>${v}</span></button>`;
+  }).join('');
+  const expHtml=graded?`<div class="exp show"><div class="h">解析 <span class="ai">AI 產生 · 未審核</span></div>${q.exp||'（此題尚未建立解析，待人工補充）'}<div class="muted" style="margin-top:8px;font-size:12px">法規依據：（待補）</div></div>`:'';
+  document.getElementById('quizScreen').innerHTML=`
+    <div class="quiz-top">
+      <div class="pbar"><i style="width:${(idx+1)/Q.length*100}%"></i></div>
+      <div class="qmeta">
+        <span class="no">${idx+1} / ${Q.length}</span>
+        <span class="tag">${q.chapter.replace(/^第.章\s*/,'')}</span>
+        <span class="tag">第 ${q.no} 題</span>
+        <span class="spacer"></span>
+        ${mode==='mock'?'<span class="timer" id="timer">40:00</span>':'<span class="saved"><b></b>已自動儲存</span>'}
+      </div>
+      <div class="row" style="margin-top:8px;justify-content:space-between">
+        <button onclick="go('home')" title="暫存離開" style="border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:10px;padding:8px 14px;font-size:13px;white-space:nowrap;cursor:pointer">✕ 暫存離開</button>
+        <div class="fontctl"><button onclick="setFont(-1)">A−</button><button onclick="setFont(1)">A＋</button><button onclick="openNav()" title="題目導覽">☷</button></div>
+      </div>
+    </div>
+    <div class="qbody" style="--qfs:${fs}px">
+      <div class="stem">${q.stem}</div>
+      ${optHtml}
+      ${expHtml}
+    </div>
+    <div class="quiz-bottom">
+      <button class="tool ${q.flag?'flag on':'flag'}" onclick="toggleFlag()" title="標記">⚑</button>
+      <button class="tool ${q.fav?'on':''}" onclick="toggleFav()" title="收藏">★</button>
+      <button class="btn ghost" onclick="prev()" ${idx===0?'disabled':''}>上一題</button>
+      ${idx<Q.length-1?`<button class="btn primary" onclick="next()">下一題</button>`:`<button class="btn primary" onclick="openSubmit(false)">交卷</button>`}
+    </div>`;
+}
+async function pick(k){
+  const q=Q[idx];
+  if(q.picked!==undefined) return;
+  q.picked=k; renderQuiz();
+  try{
+    const r=await api('/sessions/'+SID+'/answer',{method:'POST',body:JSON.stringify({item_id:q.item_id,selected:k})});
+    if(r.correct_label!==undefined){q.ans=r.correct_label;q.exp=r.explanation;}
+    renderQuiz();
+  }catch(e){toast('儲存失敗：'+e.message);}
+}
+function next(){if(idx<Q.length-1){idx++;renderQuiz();document.getElementById('scroll').scrollTop=0;}}
+function prev(){if(idx>0){idx--;renderQuiz();document.getElementById('scroll').scrollTop=0;}}
+function setFont(d){fontStep=Math.max(-1,Math.min(3,fontStep+d));renderQuiz();}
+function toggleFlag(){Q[idx].flag=!Q[idx].flag;renderQuiz();toast(Q[idx].flag?'已標記':'已取消標記');}
+function toggleFav(){Q[idx].fav=!Q[idx].fav;renderQuiz();toast(Q[idx].fav?'已收藏':'已取消收藏');}
+
+function openNav(){
+  document.getElementById('navGrid').innerHTML=Q.map((q,i)=>{
+    let cls='gcell';if(q.picked!==undefined)cls+=' done';if(q.flag)cls+=' flagged';if(i===idx)cls+=' cur';
+    return `<div class="${cls}" onclick="jump(${i})">${i+1}</div>`;}).join('');
+  document.getElementById('mask').classList.add('show');document.getElementById('navSheet').classList.add('show');
+}
+function jump(i){idx=i;closeSheets();renderQuiz();}
+function openSubmit(auto){
+  const done=Q.filter(q=>q.picked!==undefined).length, un=Q.length-done;
+  document.getElementById('submitInfo').textContent=auto?'時間到，系統將自動交卷。':`已作答 ${done} 題，尚有 ${un} 題未作答。`;
+  document.getElementById('mask').classList.add('show');document.getElementById('submitSheet').classList.add('show');
+}
+function closeSheets(){document.getElementById('mask').classList.remove('show');document.getElementById('navSheet').classList.remove('show');document.getElementById('submitSheet').classList.remove('show');}
+
+async function doSubmit(){
+  closeSheets(); if(timer){clearInterval(timer);timer=null;}
+  let res;
+  try{ res=await api('/sessions/'+SID+'/submit',{method:'POST'}); }
+  catch(e){ toast('交卷失敗：'+e.message); return; }
+  const pass=res.pass;
+  document.getElementById('resultScreen').innerHTML=`
+    <div class="card" style="text-align:center">
+      <div class="score-ring" style="--p:${res.score}"><i><b>${res.score}</b><span>正確率</span></i></div>
+      <div class="pass ${pass?'ok':'no'}">${pass?'✓ 及格':'✗ 未達 60 分'}</div>
+      <div class="kpis" style="margin-top:16px">
+        <div class="kpi"><b style="color:var(--ok)">${res.correct}</b><small>答對</small></div>
+        <div class="kpi"><b style="color:var(--bad)">${res.wrong}</b><small>答錯</small></div>
+        <div class="kpi"><b>${res.unanswered}</b><small>未作答</small></div>
+      </div>
+    </div>
+    <div class="card"><h2>各章正確率</h2>
+      ${res.per_chapter.map(c=>{const acc=c.accuracy;return `<div style="margin-bottom:12px"><div class="row" style="justify-content:space-between;font-size:13px;margin-bottom:5px"><span>${c.chapter.replace(/^第.章\s*/,'')}</span><span class="muted">${acc}%</span></div><div class="bar"><i style="width:${acc}%;background:${acc<50?'var(--bad)':'var(--accent)'}"></i></div></div>`;}).join('')}
+    </div>
+    <div class="card"><h2>錯題清單 <span class="muted" style="font-weight:400;font-size:13px">· ${res.wrong_list.length} 題</span></h2>
+      ${res.wrong_list.length?res.wrong_list.map(w=>`<div class="wrong-item"><div class="badge">✗</div><div class="t">${w.stem.slice(0,34)}…<br><small>正解 ${w.correct_label} · 你選 ${w.your||'—'} · ${w.chapter.replace(/^第.章\s*/,'')}</small></div></div>`).join(''):'<p class="muted" style="font-size:14px">全部答對，太強了！</p>'}
+    </div>
+    <button class="btn primary" style="width:100%;min-height:52px" onclick="startQuiz(true)">只做錯題</button>
+    <div style="height:10px"></div>
+    <button class="btn ghost" style="width:100%;min-height:48px;flex:none" onclick="go('home')">回首頁</button>`;
+  go('result');
+}
+
+async function loadWrong(){
+  const el=document.getElementById('wrongList');
+  try{
+    const d=await api('/wrong');
+    el.innerHTML=d.items.length? d.items.map(w=>`<div class="wrong-item"><div class="badge">×${w.wrong_count}</div><div class="t">${(w.stem||'').slice(0,34)}…<br><small>${(w.chapter||'').replace(/^第.章\s*/,'')}</small></div></div>`).join('') : '<p class="muted" style="font-size:14px">目前沒有錯題，先去練習吧！</p>';
+  }catch(e){el.innerHTML='<p class="muted" style="font-size:13px">無法載入錯題：'+e.message+'</p>';}
+}
+
+/* mode segment handlers */
+document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#modeSeg button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); curMode=MODE_MAP[b.dataset.mode]||'practice';
+  document.getElementById('modeDesc').textContent=MODE_DESC[b.dataset.mode];
+});
+renderChapters();
+
+</script>
+</body>
+</html>
