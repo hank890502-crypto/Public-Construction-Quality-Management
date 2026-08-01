@@ -101,7 +101,7 @@ def new_session(body: NewSession):
     params = [ver]
     where = "q.bank_version_id=%s AND q.status='published'"
     if body.chapter_ids:
-        where += " AND q.chapter_id = ANY(%s)"; params.append(body.chapter_ids)
+        where += " AND q.chapter_id = ANY(%s::uuid[])"; params.append(body.chapter_ids)
     cur.execute(f"""
       SELECT q.id, q.original_no, q.stem, c.name AS chapter,
              coalesce(jsonb_agg(jsonb_build_object('label',o.label,'content',o.content)
@@ -223,7 +223,7 @@ def stats():
     ver = published_version(cur)
     cur.execute("SELECT count(*) AS total FROM questions WHERE bank_version_id=%s AND status='published'", (ver,))
     total = cur.fetchone()['total']
-    cur.execute("""SELECT count(DISTINCT it.question_id) AS answered,
+    cur.execute("""SELECT count(DISTINCT it.question_id) FILTER (WHERE it.selected IS NOT NULL) AS answered,
                           count(*) FILTER (WHERE it.is_correct) AS correct,
                           count(*) FILTER (WHERE it.selected IS NOT NULL) AS answered_items
                    FROM exam_items it JOIN exam_sessions s ON s.id = it.session_id
