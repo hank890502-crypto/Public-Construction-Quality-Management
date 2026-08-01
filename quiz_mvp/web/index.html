@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1f4e79">
-<title>公共工程品管題庫（機電）· 手機版線稿</title>
+<title>公共工程品管題庫（機電）</title>
 <style>
   :root{
     --bg:#eef1f5; --card:#ffffff; --ink:#1c2530; --muted:#6b7787; --line:#e3e8ef;
@@ -22,19 +22,15 @@
   html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
     font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,-apple-system,"Segoe UI",sans-serif;
     -webkit-font-smoothing:antialiased;}
-  /* desktop: show a phone frame; mobile: fill screen */
-  .stage{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:0;}
-  .device{position:relative;width:100%;max-width:100%;height:100vh;background:var(--bg);
+  /* 響應式：手機全螢幕；電腦置中欄位 */
+  .stage{min-height:100vh;background:var(--bg);}
+  .device{position:relative;width:100%;height:100vh;background:var(--bg);
     display:flex;flex-direction:column;overflow:hidden;}
-  @media(min-width:700px){
-    .stage{padding:28px;}
-    .device{max-width:400px;height:840px;border-radius:44px;box-shadow:var(--shadow),0 0 0 12px #0b0f14,0 0 0 14px #222c38;
-      overflow:hidden;}
-    .device::before{content:"";position:absolute;top:10px;left:50%;transform:translateX(-50%);
-      width:130px;height:26px;background:#0b0f14;border-radius:0 0 18px 18px;z-index:60;}
-    .frame-note{position:fixed;left:24px;bottom:20px;color:var(--muted);font-size:12px;max-width:230px;line-height:1.5;}
+  @media(min-width:820px){
+    body{background:#e5e9f0;}
+    .stage{display:flex;justify-content:center;}
+    .device{max-width:760px;box-shadow:0 0 0 1px var(--line),0 24px 70px rgba(20,40,70,.14);}
   }
-  @media(max-width:699px){ .frame-note{display:none;} }
 
   /* ---- app chrome ---- */
   .app{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;background:var(--bg);}
@@ -198,25 +194,25 @@
         <section class="screen active" data-screen="home">
           <div class="card">
             <div class="ring-wrap">
-              <div class="ring" style="--p:42"><i><b>42%</b><span>整體正確率</span></i></div>
+              <div class="ring" id="homeRing" style="--p:0"><i><b id="homeAcc">—</b><span>整體正確率</span></i></div>
               <div class="stat">
-                <div class="big">1,066 <small>/ 2,538 題已作答</small></div>
-                <div class="muted" style="font-size:13px;margin-top:6px">錯題 168 · 收藏 37 · 連續學習 6 天</div>
-                <div class="bar" style="margin-top:10px"><i style="width:42%"></i></div>
+                <div class="big"><span id="homeAnswered">0</span> <small>/ <span id="homeTotal">2,538</span> 題已作答</small></div>
+                <div class="muted" id="homeMeta" style="font-size:13px;margin-top:6px">錯題 0 · 收藏 0</div>
+                <div class="bar" style="margin-top:10px"><i id="homeBar" style="width:0%"></i></div>
               </div>
             </div>
           </div>
           <div class="quick">
-            <button class="primary" onclick="go('setup')"><span class="k">上次到第 3 章</span>繼續作答 ▸</button>
-            <button onclick="go('setup')"><span class="k">自訂章節與題數</span>開始練習</button>
+            <button class="primary" onclick="go('setup')"><span class="k">自訂章節與題數</span>開始練習 ▸</button>
+            <button onclick="go('setup')"><span class="k">全部章節隨機</span>快速練習</button>
             <button onclick="startMock()"><span class="k">固定題數／時間</span>模擬考</button>
-            <button onclick="go('wrong')"><span class="k">168 題待複習</span>錯題複習</button>
+            <button onclick="go('wrong')"><span class="k"><span id="wrongCount">0</span> 題待複習</span>錯題複習</button>
           </div>
           <div class="card">
             <h2>章節進度</h2>
             <div id="chapters"></div>
           </div>
-          <p class="muted" style="font-size:12px;text-align:center">此為手機版 UI 線稿，數據為示範用途</p>
+          <p class="muted" style="font-size:12px;text-align:center">題目即時取自資料庫</p>
         </section>
 
         <!-- SETUP -->
@@ -233,7 +229,10 @@
             <p class="muted" id="modeDesc" style="font-size:13px;margin:12px 0 0">即時練習：每答完一題立即顯示對錯與解析。</p>
           </div>
           <div class="card">
-            <h2>選擇章節</h2>
+            <h2 style="display:flex;align-items:center;justify-content:space-between">選擇章節
+              <button id="allChapBtn" onclick="toggleAllChapters()" style="font-size:12px;font-weight:600;color:#fff;background:var(--brand-2);border:none;border-radius:8px;padding:6px 12px;cursor:pointer">全選</button>
+            </h2>
+            <p class="muted" style="font-size:12px;margin:0 0 10px">不選＝全部章節隨機出題</p>
             <div class="chips" id="chapChips"></div>
           </div>
           <div class="card">
@@ -251,7 +250,7 @@
             <div class="toggle"><span>打亂選項順序</span><div class="sw" onclick="this.classList.toggle('on')"><i></i></div></div>
             <div class="toggle"><span>未作答優先</span><div class="sw on" onclick="this.classList.toggle('on')"><i></i></div></div>
           </div>
-          <button class="btn primary" style="width:100%;min-height:54px" onclick="startQuiz()">開始作答（示範載入 5 題）</button>
+          <button class="btn primary" style="width:100%;min-height:54px" onclick="startQuiz()">開始作答</button>
           <div style="height:10px"></div>
           <button class="btn ghost" style="width:100%;min-height:46px;flex:none" onclick="go('home')">返回</button>
         </section>
@@ -279,7 +278,7 @@
             <p style="margin:0;font-size:14px">年費會員 · 到期日 2027/07/31</p>
             <p class="muted" style="font-size:13px;margin:8px 0 0">可用題庫：公共工程品管（機電）· 可看解析 · 可模擬考</p>
           </div>
-          <p class="muted" style="font-size:12px;text-align:center">手機版 UI 線稿 · 示範資料</p>
+          <p class="muted" style="font-size:12px;text-align:center">公共工程品管題庫（機電）</p>
         </section>
 
         <!-- QUIZ -->
@@ -318,7 +317,8 @@
       <div class="toast" id="toast"></div>
     </div>
   </div>
-  <div class="frame-note">題庫 MVP（前端＋FastAPI＋PostgreSQL）。題目即時從資料庫載入；點選項即時批改並顯示解析。</div>
+  <!-- -->
+
 </div>
 
 <script>
@@ -343,6 +343,7 @@ function go(s){
   document.getElementById('scroll').scrollTop=0;
   if(timer&&s!=='quiz'){clearInterval(timer);timer=null;}
   if(s==='wrong') loadWrong();
+  if(s==='home') renderHome();
   if((s==='home'||s==='setup')&&!chaptersLoaded) renderChapters();
 }
 function toast(t){const el=document.getElementById('toast');el.textContent=t;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),1800);}
@@ -377,7 +378,7 @@ async function startQuiz(fromWrong){
     Q=d.questions.map(q=>({item_id:q.item_id,no:q.no,chapter:q.chapter,stem:q.stem,
       opts:Object.fromEntries((q.options||[]).map(o=>[o.label,o.content])),
       picked:undefined,ans:null,exp:null,fav:false,flag:false}));
-    idx=0; renderQuiz(); toast('已載入 '+Q.length+' 題真實題目');
+    idx=0; renderQuiz(); toast('已載入 '+Q.length+' 題');
     if(mode==='mock'){timeLeft=40*60;startTimer();}
   }catch(e){document.getElementById('quizScreen').innerHTML='<div style="padding:50px 20px" class="muted">無法建立作答：'+e.message+'</div>';}
 }
@@ -493,7 +494,29 @@ document.querySelectorAll('#modeSeg button').forEach(b=>b.onclick=()=>{
   b.classList.add('on'); curMode=MODE_MAP[b.dataset.mode]||'practice';
   document.getElementById('modeDesc').textContent=MODE_DESC[b.dataset.mode];
 });
-renderChapters();
+
+function toggleAllChapters(){
+  const chips=[...document.querySelectorAll('#chapChips .chip')];
+  if(!chips.length) return;
+  const allOn=chips.every(c=>c.classList.contains('on'));
+  chips.forEach(c=>{ if(allOn){c.classList.remove('on');selChap.delete(c.dataset.id);} else {c.classList.add('on');selChap.add(c.dataset.id);} });
+  const btn=document.getElementById('allChapBtn'); if(btn) btn.textContent=allOn?'全選':'全不選';
+}
+async function renderHome(){
+  try{
+    const s=await api('/stats');
+    const acc=s.accuracy||0;
+    const set=(id,v)=>{const el=document.getElementById(id); if(el) el.textContent=v;};
+    const ring=document.getElementById('homeRing'); if(ring) ring.style.setProperty('--p',acc);
+    set('homeAcc',acc+'%');
+    set('homeAnswered',(s.answered||0).toLocaleString());
+    set('homeTotal',(s.total||0).toLocaleString());
+    set('homeMeta','錯題 '+(s.wrong||0)+' · 收藏 '+(s.favorites||0));
+    const bar=document.getElementById('homeBar'); if(bar) bar.style.width=(s.total?Math.round((s.answered||0)/s.total*100):0)+'%';
+    set('wrongCount',(s.wrong||0));
+  }catch(e){}
+}
+renderChapters(); renderHome();
 
 </script>
 </body>
