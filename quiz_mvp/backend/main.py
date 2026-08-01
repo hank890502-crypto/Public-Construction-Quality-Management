@@ -216,3 +216,25 @@ def wrong_book():
                    ORDER BY w.wrong_count DESC, w.last_wrong_at DESC LIMIT 100""", (DEMO_USER,))
     rows = cur.fetchall(); conn.close()
     return {'items': rows}
+
+@app.get('/api/stats')
+def stats():
+    conn = db(); cur = conn.cursor(); set_ctx(cur)
+    ver = published_version(cur)
+    cur.execute("SELECT count(*) AS total FROM questions WHERE bank_version_id=%s AND status='published'", (ver,))
+    total = cur.fetchone()['total']
+    cur.execute("""SELECT count(DISTINCT it.question_id) AS answered,
+                          count(*) FILTER (WHERE it.is_correct) AS correct,
+                          count(*) FILTER (WHERE it.selected IS NOT NULL) AS answered_items
+                   FROM exam_items it JOIN exam_sessions s ON s.id = it.session_id
+                   WHERE s.user_id = %s""", (DEMO_USER,))
+    r = cur.fetchone()
+    answered = r['answered'] or 0; correct = r['correct'] or 0; ai = r['answered_items'] or 0
+    cur.execute("SELECT count(*) AS wrong FROM wrong_questions WHERE user_id=%s AND resolved=false", (DEMO_USER,))
+    wrong = cur.fetchone()['wrong']
+    cur.execute("SELECT count(*) AS favs FROM favorites WHERE user_id=%s", (DEMO_USER,))
+    favs = cur.fetchone()['favs']
+    conn.close()
+    acc = round(correct / ai * 100) if ai else 0
+    return {'total': total, 'answered': answered, 'correct': correct,
+            'wrong': wrong, 'favorites': favs, 'accuracy': acc}
