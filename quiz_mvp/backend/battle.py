@@ -27,7 +27,7 @@ def _db():
     conn.cursor_factory = psycopg2.extras.RealDictCursor
     return conn
 
-def fetch_questions(n):
+def fetch_questions(n, chapters=None):
     conn = _db(); cur = conn.cursor()
     try:
         cur.execute("""SELECT id FROM bank_versions WHERE bank_id=%s AND status='published'
@@ -36,23 +36,29 @@ def fetch_questions(n):
         if not r:
             return []
         ver = r['id']
-        cur.execute("""
+        params = [ver]
+        where = "q.bank_version_id=%s AND q.status='published'"
+        if chapters:
+            where += " AND q.chapter_id = ANY(%s::uuid[])"
+            params.append(list(chapters))
+        params.append(n)
+        cur.execute(f"""
           SELECT q.original_no AS no, q.stem, c.name AS chapter,
                  coalesce(jsonb_agg(jsonb_build_object('label',o.label,'content',o.content)
                           ORDER BY o.sort_order) FILTER (WHERE o.id IS NOT NULL),'[]') AS options,
                  (SELECT label FROM question_options WHERE question_id=q.id AND is_correct LIMIT 1) AS correct
           FROM questions q JOIN chapters c ON c.id=q.chapter_id
           LEFT JOIN question_options o ON o.question_id=q.id
-          WHERE q.bank_version_id=%s AND q.status='published'
+          WHERE {where}
           GROUP BY q.id, q.original_no, q.stem, c.name
-          ORDER BY random() LIMIT %s""", (ver, n))
+          ORDER BY random() LIMIT %s""", params)
         return cur.fetchall()
     finally:
         conn.close()
 
-async def _questions(n):
+async def _questions(n, chapters=None):
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, fetch_questions, n)
+    return await loop.run_in_executor(None, fetch_questions, n, chapters)
 
 # ---------------- 連線封裝 ----------------
 class Conn:
@@ -65,6 +71,7 @@ class Conn:
         self.score = 0
         self.total_ms = 0
         self.qcount = DEFQ
+        self.qchapters = None
         self.done = asyncio.get_running_loop().create_future()
     async def send(self, obj):
         if not self.alive:
@@ -96,11 +103,14 @@ def _new_code():
     return 'PK-' + ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(4))
 
 # ---------------- 一場對戰 ----------------
-async def run_match(a, b, questions):
+async def run_match(a, b, questions, chapters=None):
     loop = asyncio.get_running_loop()
     total = len(questions)
-    await a.send({'t': 'start', 'total': total, 'you': a.name, 'opp': b.name})
-    await b.send({'t': 'start', 'total': total, 'you': b.name, 'opp': a.name})
+    # 本場章節範圍：有指定章節 → 列出實際出到的章節；未指定 → 全部章節
+    names = list(dict.fromkeys(q['chapter'] for q in questions if q.get('chapter')))
+    scope = ('、'.join(names) if names else '指定章節') if chapters else '全部章節'
+    await a.send({'t': 'start', 'total': total, 'you': a.name, 'opp': b.name, 'scope': scope})
+    await b.send({'t': 'start', 'total': total, 'you': b.name, 'opp': a.name, 'scope': scope})
     try:
         for i, q in enumerate(questions, 1):
             if not (a.alive and b.alive):
@@ -198,6 +208,8 @@ async def battle_ws(ws: WebSocket):
         count = DEFQ
     c = Conn(ws, hello.get('token'), hello.get('name'))
     c.qcount = count
+    _ch = hello.get('chapter_ids')
+    c.qchapters = [str(x) for x in _ch][:60] if isinstance(_ch, list) and _ch else None
     rtask = asyncio.ensure_future(_reader(c))
     waiting_code = None; waiting_quick = False
     try:
@@ -210,10 +222,10 @@ async def battle_ws(ws: WebSocket):
             if host is None or not host.alive or host.done.done():
                 await c.send({'t': 'error', 'msg': '房間不存在或已關閉'})
                 return
-            qs = await _questions(host.qcount)
+            qs = await _questions(host.qcount, host.qchapters)
             if not qs:
                 await c.send({'t': 'error', 'msg': '題庫讀取失敗'}); host.finish(); return
-            asyncio.ensure_future(run_match(host, c, qs))
+            asyncio.ensure_future(run_match(host, c, qs, host.qchapters))
             await c.done
 
         elif mode == 'create':
@@ -236,10 +248,10 @@ async def battle_ws(ws: WebSocket):
                 if host is None:
                     _quick.append(c); waiting_quick = True
             if host is not None:
-                qs = await _questions(host.qcount)
+                qs = await _questions(host.qcount, host.qchapters)
                 if not qs:
                     await c.send({'t': 'error', 'msg': '題庫讀取失敗'}); host.finish(); return
-                asyncio.ensure_future(run_match(host, c, qs))
+                asyncio.ensure_future(run_match(host, c, qs, host.qchapters))
                 await c.done
             else:
                 await c.send({'t': 'waiting', 'mode': 'quick'})

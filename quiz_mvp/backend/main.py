@@ -11,7 +11,7 @@
 連線：DATABASE_URL 或 PG* 環境變數。管理端需環境變數 ADMIN_KEY。
 資料表遷移與題庫匯入由 deploy/start.py 負責。
 """
-import os, json, secrets
+import os, json, secrets, time, threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -394,3 +394,32 @@ def admin_list_codes(x_admin_key: str | None = Header(None)):
         return {'codes': cur.fetchall()}
     finally:
         conn.close()
+
+# ---------------- 在線人數（記憶體；單一實例；僅管理者可見）----------------
+# 前端每個開著的瀏覽器定時回報一次「我在線」；後端只記錄，不對一般使用者回傳人數。
+# 人數＝最近 PRESENCE_WINDOW 秒內有回報的不重複裝置數，僅管理端（帶 ADMIN_KEY）可查。
+PRESENCE_WINDOW = float(os.environ.get('PRESENCE_WINDOW_SECS', '75'))
+_presence = {}
+_presence_lock = threading.Lock()
+
+def _presence_touch(token):
+    now = time.monotonic()
+    with _presence_lock:
+        if token:
+            _presence[token] = now
+        cutoff = now - PRESENCE_WINDOW
+        for k in [k for k, v in _presence.items() if v < cutoff]:
+            _presence.pop(k, None)
+        return len(_presence)
+
+@app.post('/api/presence')
+def presence_ping(x_client_token: str | None = Header(None)):
+    """所有使用者定時呼叫；只記錄在線、不回傳人數（人數僅管理者可查）。"""
+    _presence_touch(x_client_token)
+    return {'ok': True}
+
+@app.get('/api/admin/online')
+def admin_online(x_admin_key: str | None = Header(None)):
+    """管理者查詢目前在線人數（需 ADMIN_KEY）。"""
+    _check_admin(x_admin_key)
+    return {'online': _presence_touch(None), 'window_secs': int(PRESENCE_WINDOW)}

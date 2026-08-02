@@ -36,6 +36,15 @@
   </div>
 
   <div class="card">
+    <h2>目前在線人數 <button class="sec" style="margin:0 0 0 8px;padding:6px 12px;font-size:13px" onclick="loadOnline()">重新整理</button></h2>
+    <div style="display:flex;align-items:baseline;gap:12px">
+      <div id="onlineNum" style="font-size:44px;font-weight:800;color:#1f4e79;font-variant-numeric:tabular-nums;line-height:1">—</div>
+      <div class="muted" id="onlineNote">輸入上方管理金鑰後顯示（每 15 秒自動更新，只有你看得到）</div>
+    </div>
+    <div id="onlineErr" class="err"></div>
+  </div>
+
+  <div class="card">
     <h2>核發新授權碼</h2>
     <div class="row">
       <div><label>數量</label><input id="count" type="number" value="5" min="1" max="500"></div>
@@ -85,6 +94,19 @@ async function load(){
       <td>${c.note||''}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">尚無授權碼</td></tr>';
   }catch(e){$('listErr').textContent='讀取失敗：'+e.message;}
 }
+async function loadOnline(){
+  $('onlineErr').textContent='';
+  if(!key()){ $('onlineNum').textContent='—'; $('onlineNote').textContent='請先輸入管理金鑰'; return; }
+  try{
+    const d=await api('/admin/online');
+    $('onlineNum').textContent=d.online;
+    $('onlineNote').textContent='最近 '+d.window_secs+' 秒內在線的使用者（每 15 秒自動更新，只有你看得到）';
+  }catch(e){ $('onlineNum').textContent='—'; $('onlineErr').textContent='讀取失敗：'+e.message; }
+}
+let _onlineKeyT;
+$('key').addEventListener('input', ()=>{ clearTimeout(_onlineKeyT); _onlineKeyT=setTimeout(loadOnline, 400); });
+setInterval(loadOnline, 15000);
+loadOnline();
 </script>
 </body>
 </html>

@@ -633,6 +633,21 @@ function battleLeave(){ if(bTimer){clearInterval(bTimer);bTimer=null;} if(bws){t
 function btBack(){ battleLeave(); }
 const BT_TOP='<div class="quiz-top"><div class="row" style="justify-content:space-between"><button onclick="go(\'home\')" style="border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer">✕ 離開</button><b style="font-size:15px">好友對戰 PK</b><span style="width:52px"></span></div></div>';
 
+let bChap=new Set(), _btChaps=null;
+async function loadBattleChaps(){
+  const wrap=document.getElementById('btChapChips'); if(!wrap) return;
+  try{
+    if(!_btChaps){ const d=await api('/chapters'); _btChaps=[]; d.units.forEach(u=>u.chapters.forEach(c=>_btChaps.push({id:c.chapter_id,name:c.chapter.replace(/^第.章\s*/,'')}))); }
+    wrap.innerHTML=_btChaps.map(c=>`<div class="chip${bChap.has(c.id)?' on':''}" data-id="${c.id}" onclick="btToggleChip(this)">${c.name}</div>`).join('');
+  }catch(e){ wrap.innerHTML='<span class="muted" style="font-size:13px">章節載入失敗：'+e.message+'</span>'; }
+}
+function btToggleChip(el){el.classList.toggle('on');const id=el.dataset.id;if(bChap.has(id))bChap.delete(id);else bChap.add(id);}
+function btToggleAllChaps(){
+  const chips=[...document.querySelectorAll('#btChapChips .chip')]; if(!chips.length) return;
+  const allOn=chips.every(c=>c.classList.contains('on'));
+  chips.forEach(c=>{ if(allOn){c.classList.remove('on');bChap.delete(c.dataset.id);} else {c.classList.add('on');bChap.add(c.dataset.id);} });
+  const btn=document.getElementById('btAllChap'); if(btn) btn.textContent=allOn?'全選':'全不選';
+}
 function renderBattleSetup(){
   battleLeave(); bstate={phase:'setup'};
   document.getElementById('battleScreen').innerHTML=BT_TOP+`
@@ -647,6 +662,10 @@ function renderBattleSetup(){
          <input id="btCode" placeholder="輸入房碼 PK-XXXX" autocomplete="off" style="width:100%;min-height:48px;border:1px solid var(--line);border-radius:10px;padding:0 12px;font-size:16px;text-transform:uppercase;background:var(--card);color:var(--ink)">
        </div>
        <p class="muted" id="btModeDesc" style="font-size:13px;margin:12px 0 0">開房間：產生房碼給朋友加入。</p>
+     </div>
+     <div class="card" id="btChapCard"><h2 style="display:flex;align-items:center;justify-content:space-between">選擇章節<button id="btAllChap" onclick="btToggleAllChaps()" style="font-size:12px;font-weight:600;color:#fff;background:var(--brand-2);border:none;border-radius:8px;padding:6px 12px;cursor:pointer">全選</button></h2>
+       <p class="muted" style="font-size:12px;margin:0 0 10px">不選＝全部章節隨機出題</p>
+       <div class="chips" id="btChapChips"><span class="muted" style="font-size:13px">載入中…</span></div>
      </div>
      <div class="card" id="btCountCard"><h2>對戰題數</h2>
        <div class="stepper">
@@ -663,8 +682,10 @@ function renderBattleSetup(){
     b.classList.add('on'); bMode=b.dataset.m;
     document.getElementById('btJoinWrap').style.display=(bMode==='join')?'block':'none';
     document.getElementById('btCountCard').style.display=(bMode==='join')?'none':'block';
+    document.getElementById('btChapCard').style.display=(bMode==='join')?'none':'block';
     document.getElementById('btModeDesc').textContent=(bMode==='create')?'開房間：產生房碼給朋友加入。':(bMode==='join')?'加入房間：輸入朋友給的房碼，題數由房主決定。':'快速配對：和另一位在線等待的人自動配對。';
   });
+  loadBattleChaps();
 }
 function btStep(d){let v=parseInt(document.getElementById('btCountVal').value)||10;document.getElementById('btCountVal').value=Math.max(3,Math.min(50,v+d));}
 function btClamp(){let v=parseInt(document.getElementById('btCountVal').value)||10;document.getElementById('btCountVal').value=Math.max(3,Math.min(50,v));}
@@ -672,6 +693,7 @@ function btClamp(){let v=parseInt(document.getElementById('btCountVal').value)||
 function battleStart(){
   bCount=Math.max(3,Math.min(50,parseInt(document.getElementById('btCountVal').value)||10));
   const hello={t:'hello',mode:bMode,token:clientToken(),name:'玩家',count:bCount};
+  if(bMode!=='join' && bChap.size) hello.chapter_ids=[...bChap];
   if(bMode==='join'){const code=(document.getElementById('btCode').value||'').trim().toUpperCase();if(!code){toast('請輸入房碼');return;}hello.code=code;}
   battleWaiting('連線中…');
   try{ bws=new WebSocket(wsURL()); }catch(e){ battleWaiting('無法連線：'+e.message,true); return; }
@@ -693,18 +715,20 @@ function onBattleMsg(m){
     b.innerHTML=(m.mode==='create')?`<p class="bt-status">把房碼給朋友加入：</p><div class="bt-code">${m.code}</div><p class="bt-status">等待對手加入中…</p>`:`<p class="bt-status">快速配對中…<br>等待另一位玩家加入</p>`;
     return;
   }
-  if(m.t==='start'){bstate={phase:'play',ys:0,os:0,total:m.total};return;}
+  if(m.t==='start'){bstate={phase:'play',ys:0,os:0,total:m.total,scope:m.scope||''};return;}
   if(m.t==='round'){bRound(m);return;}
   if(m.t==='locked'){const s=document.getElementById('btOptStatus');if(s)s.textContent='已作答，等待對手…';return;}
   if(m.t==='result'){bResult(m);return;}
   if(m.t==='over'){bOver(m);return;}
 }
 function bRound(m){
-  bstate={phase:'play',i:m.i,total:m.total,ys:m.score.you,os:m.score.opp,q:m.q,picked:null};
+  const _scope=(bstate&&bstate.scope)||'';
+  bstate={phase:'play',i:m.i,total:m.total,ys:m.score.you,os:m.score.opp,q:m.q,picked:null,scope:_scope};
   if(bTimer)clearInterval(bTimer);
   const deadline=Date.now()+m.secs*1000; renderBattlePlay(deadline);
   bTimer=setInterval(()=>{const left=Math.max(0,Math.ceil((deadline-Date.now())/1000));const el=document.getElementById('btCount');if(el){el.textContent=left;el.classList.toggle('warn',left<=5);}if(left<=0){clearInterval(bTimer);bTimer=null;}},250);
 }
+function btScopeText(s){ if(!s) return ''; const p=(''+s).split('、'); return p.length<=6?s:(p.slice(0,6).join('、')+'…等 '+p.length+' 章'); }
 function renderBattlePlay(deadline){
   const q=bstate.q; const left=Math.max(0,Math.ceil((deadline-Date.now())/1000));
   const opts=(q.options||[]).map(o=>`<button class="opt" id="btopt-${o.label}" onclick="bPick('${o.label}')"><span class="lb">${o.label}</span><span>${o.content}</span></button>`).join('');
@@ -715,6 +739,7 @@ function renderBattlePlay(deadline){
      <div class="bt-count" id="btCount">${left}</div>
    </div>
    <div class="bt-round">第 ${bstate.i} / ${bstate.total} 題　·　左邊你、右邊對手</div>
+   ${bstate.scope?`<div class="bt-round" style="margin-top:0;color:var(--brand-2)">本場範圍：${btScopeText(bstate.scope)}</div>`:''}
    <div class="qbody"><div class="stem">${q.stem}</div>${opts}
      <p class="bt-status" id="btOptStatus">選擇你的答案（兩人都答完就立刻進下一題；限時 ${left>0?'':''}30 秒）</p>
    </div>`;
@@ -758,7 +783,8 @@ function bOver(m){
 }
 
 
-renderChapters(); renderHome();
+function startPresence(){ const ping=()=>{ api('/presence',{method:'POST'}).catch(()=>{}); }; ping(); setInterval(ping, 25000); }
+renderChapters(); renderHome(); startPresence();
 
 </script>
 </body>
