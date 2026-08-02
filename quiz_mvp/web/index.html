@@ -488,7 +488,9 @@ function renderQuiz(){
 }
 async function pick(k){
   const q=Q[idx];
-  if(q.picked!==undefined) return;
+  const reveal=(mode==='practice'||mode==='wrong_review'||mode==='read');
+  if(reveal && q.picked!==undefined) return;   /* 揭曉模式（即時/錯題/背題）：答完即鎖定，避免看到答案後再改 */
+  if(q.picked===k) return;                      /* 選項沒改變就不重送；考試模式可自由改選 */
   q.picked=k; renderQuiz();
   try{
     const r=await api('/sessions/'+SID+'/answer',{method:'POST',body:JSON.stringify({item_id:q.item_id,selected:k})});
