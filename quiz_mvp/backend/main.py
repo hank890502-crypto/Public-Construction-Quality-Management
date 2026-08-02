@@ -28,7 +28,9 @@ TRIAL_DAYS      = int(os.environ.get('TRIAL_DAYS', '7'))
 ADMIN_KEY       = os.environ.get('ADMIN_KEY')
 WEB_DIR = Path(__file__).resolve().parent.parent / 'web'
 
+import battle
 app = FastAPI(title='題庫 MVP')
+app.include_router(battle.router)
 
 def db():
     conn = psycopg2.connect(os.environ['DATABASE_URL']) if os.environ.get('DATABASE_URL') else psycopg2.connect()

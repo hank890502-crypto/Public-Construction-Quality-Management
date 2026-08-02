@@ -215,6 +215,18 @@
     .btn:active,.quick button:active,.chip:active,.seg button:active,.stepper button:active,
     .tool:active,.fontctl button:active,.icon-btn:active,.gcell:active,.opt:active,.tabbar button:active .ic{transform:none !important;}
   }
+  /* ===== 好友對戰 PK ===== */
+  .bt-head{display:flex;align-items:center;gap:12px;background:var(--card);border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;}
+  .bt-head .bt-name{font-size:11px;color:var(--muted);font-weight:600}
+  .bt-score{flex:1;display:flex;align-items:center;justify-content:center;gap:10px;font-weight:800;font-size:24px;font-variant-numeric:tabular-nums}
+  .bt-score .me{color:var(--brand)} .bt-score .op{color:var(--bad)} .bt-score .vs{color:var(--muted);font-size:15px}
+  .bt-count{flex:none;width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;border:3px solid var(--brand);color:var(--brand);font-variant-numeric:tabular-nums;transition:color .2s,border-color .2s}
+  .bt-count.warn{border-color:var(--bad);color:var(--bad)}
+  .bt-round{font-size:12px;color:var(--muted);text-align:center;margin:10px 0 2px}
+  .bt-status{text-align:center;font-size:13px;color:var(--muted);margin:14px 0 0;line-height:1.6}
+  .bt-code{font-size:32px;font-weight:800;letter-spacing:4px;text-align:center;margin:14px 0;color:var(--brand)}
+  .bt-big{font-size:24px;font-weight:800;text-align:center;margin:6px 0}
+  .opt.op-pick{box-shadow:inset 0 0 0 2px var(--muted)}
 </style>
 </head>
 <body>
@@ -251,6 +263,7 @@
             <button onclick="startMock()"><span class="k">固定題數／時間</span>模擬考</button>
             <button onclick="go('wrong')"><span class="k"><span id="wrongCount">0</span> 題待複習</span>錯題複習</button>
           </div>
+          <button class="btn primary" style="width:100%;min-height:56px;margin-bottom:14px;font-size:16px" onclick="go('battle')">🆚 好友對戰 PK</button>
           <div class="card">
             <h2>章節進度</h2>
             <div id="chapters"></div>
@@ -337,6 +350,7 @@
 
         <!-- RESULT -->
         <section class="screen" data-screen="result" id="resultScreen"></section>
+        <section class="screen" data-screen="battle" id="battleScreen"></section>
       </div>
 
       <!-- ===== bottom tab bar ===== -->
@@ -392,11 +406,13 @@ async function api(path, opts){
 function go(s){
   document.querySelectorAll('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===s));
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on',b.dataset.tab===s));
-  const quiz=(s==='quiz'||s==='result');
+  const quiz=(s==='quiz'||s==='result'||s==='battle');
   document.getElementById('topbar').classList.toggle('hide',quiz);
   document.getElementById('tabbar').classList.toggle('hide',quiz);
   document.getElementById('scroll').scrollTop=0;
   if(timer&&s!=='quiz'){clearInterval(timer);timer=null;}
+  if(s!=='battle') battleLeave();
+  if(s==='battle') renderBattleSetup();
   if(s==='wrong') loadWrong();
   if(s==='me') renderPlan();
   if(s==='home') renderHome();
@@ -609,6 +625,139 @@ async function doRedeem(){
 }
 function quizBase(){ return Math.max(17, Math.min(24, Math.round(17 + (window.innerWidth-820)/170))); }
 let _rz; window.addEventListener('resize', ()=>{ clearTimeout(_rz); _rz=setTimeout(()=>{ const a=document.querySelector('.screen.active'); if(a && a.dataset.screen==='quiz') renderQuiz(); }, 150); });
+
+/* ===== 好友對戰 PK（WebSocket）===== */
+let bws=null, bstate=null, bTimer=null, bMode='create', bCount=10;
+function wsURL(){return (location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/battle';}
+function battleLeave(){ if(bTimer){clearInterval(bTimer);bTimer=null;} if(bws){try{bws.onclose=null;bws.close();}catch(e){} bws=null;} bstate=null; }
+function btBack(){ battleLeave(); }
+const BT_TOP='<div class="quiz-top"><div class="row" style="justify-content:space-between"><button onclick="go(\'home\')" style="border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer">✕ 離開</button><b style="font-size:15px">好友對戰 PK</b><span style="width:52px"></span></div></div>';
+
+function renderBattleSetup(){
+  battleLeave(); bstate={phase:'setup'};
+  document.getElementById('battleScreen').innerHTML=BT_TOP+`
+   <div class="qbody">
+     <div class="card"><h2>對戰模式</h2>
+       <div class="seg" id="btModeSeg">
+         <button class="on" data-m="create">開房間</button>
+         <button data-m="join">加入房間</button>
+         <button data-m="quick">快速配對</button>
+       </div>
+       <div id="btJoinWrap" style="margin-top:12px;display:none">
+         <input id="btCode" placeholder="輸入房碼 PK-XXXX" autocomplete="off" style="width:100%;min-height:48px;border:1px solid var(--line);border-radius:10px;padding:0 12px;font-size:16px;text-transform:uppercase;background:var(--card);color:var(--ink)">
+       </div>
+       <p class="muted" id="btModeDesc" style="font-size:13px;margin:12px 0 0">開房間：產生房碼給朋友加入。</p>
+     </div>
+     <div class="card" id="btCountCard"><h2>對戰題數</h2>
+       <div class="stepper">
+         <button onclick="btStep(-5)">−</button>
+         <input class="val" id="btCountVal" type="number" inputmode="numeric" min="3" max="50" value="${bCount}" onchange="btClamp()" style="width:96px;height:46px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)">
+         <button onclick="btStep(5)">＋</button>
+         <span class="muted" style="font-size:13px">題（3–50）</span>
+       </div>
+     </div>
+     <button class="btn primary" style="width:100%;min-height:54px" onclick="battleStart()">開始對戰</button>
+   </div>`;
+  document.querySelectorAll('#btModeSeg button').forEach(b=>b.onclick=()=>{
+    document.querySelectorAll('#btModeSeg button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); bMode=b.dataset.m;
+    document.getElementById('btJoinWrap').style.display=(bMode==='join')?'block':'none';
+    document.getElementById('btCountCard').style.display=(bMode==='join')?'none':'block';
+    document.getElementById('btModeDesc').textContent=(bMode==='create')?'開房間：產生房碼給朋友加入。':(bMode==='join')?'加入房間：輸入朋友給的房碼，題數由房主決定。':'快速配對：和另一位在線等待的人自動配對。';
+  });
+}
+function btStep(d){let v=parseInt(document.getElementById('btCountVal').value)||10;document.getElementById('btCountVal').value=Math.max(3,Math.min(50,v+d));}
+function btClamp(){let v=parseInt(document.getElementById('btCountVal').value)||10;document.getElementById('btCountVal').value=Math.max(3,Math.min(50,v));}
+
+function battleStart(){
+  bCount=Math.max(3,Math.min(50,parseInt(document.getElementById('btCountVal').value)||10));
+  const hello={t:'hello',mode:bMode,token:clientToken(),name:'玩家',count:bCount};
+  if(bMode==='join'){const code=(document.getElementById('btCode').value||'').trim().toUpperCase();if(!code){toast('請輸入房碼');return;}hello.code=code;}
+  battleWaiting('連線中…');
+  try{ bws=new WebSocket(wsURL()); }catch(e){ battleWaiting('無法連線：'+e.message,true); return; }
+  bws.onopen=()=>{try{bws.send(JSON.stringify(hello));}catch(e){}};
+  bws.onmessage=ev=>{let m;try{m=JSON.parse(ev.data);}catch(e){return;}onBattleMsg(m);};
+  bws.onclose=()=>{ if(bstate&&bstate.phase!=='over'){battleWaiting('連線已中斷',true);} };
+}
+function battleWaiting(msg,err){
+  bstate={phase:'waiting'};
+  document.getElementById('battleScreen').innerHTML=BT_TOP+`<div class="qbody"><div class="card" style="text-align:center">
+     <div id="btWaitBody"><p class="bt-status">${msg}</p></div>
+     ${err?'<button class="btn primary" style="max-width:240px;margin:14px auto 0" onclick="renderBattleSetup()">返回</button>':''}
+   </div></div>`;
+}
+function onBattleMsg(m){
+  if(m.t==='error'){battleWaiting('⚠ '+m.msg,true);return;}
+  if(m.t==='waiting'){
+    const b=document.getElementById('btWaitBody'); if(!b)return;
+    b.innerHTML=(m.mode==='create')?`<p class="bt-status">把房碼給朋友加入：</p><div class="bt-code">${m.code}</div><p class="bt-status">等待對手加入中…</p>`:`<p class="bt-status">快速配對中…<br>等待另一位玩家加入</p>`;
+    return;
+  }
+  if(m.t==='start'){bstate={phase:'play',ys:0,os:0,total:m.total};return;}
+  if(m.t==='round'){bRound(m);return;}
+  if(m.t==='locked'){const s=document.getElementById('btOptStatus');if(s)s.textContent='已作答，等待對手…';return;}
+  if(m.t==='result'){bResult(m);return;}
+  if(m.t==='over'){bOver(m);return;}
+}
+function bRound(m){
+  bstate={phase:'play',i:m.i,total:m.total,ys:m.score.you,os:m.score.opp,q:m.q,picked:null};
+  if(bTimer)clearInterval(bTimer);
+  const deadline=Date.now()+m.secs*1000; renderBattlePlay(deadline);
+  bTimer=setInterval(()=>{const left=Math.max(0,Math.ceil((deadline-Date.now())/1000));const el=document.getElementById('btCount');if(el){el.textContent=left;el.classList.toggle('warn',left<=5);}if(left<=0){clearInterval(bTimer);bTimer=null;}},250);
+}
+function renderBattlePlay(deadline){
+  const q=bstate.q; const left=Math.max(0,Math.ceil((deadline-Date.now())/1000));
+  const opts=(q.options||[]).map(o=>`<button class="opt" id="btopt-${o.label}" onclick="bPick('${o.label}')"><span class="lb">${o.label}</span><span>${o.content}</span></button>`).join('');
+  document.getElementById('battleScreen').innerHTML=`
+   <div class="bt-head">
+     <div class="bt-name">你</div>
+     <div class="bt-score"><span class="me">${bstate.ys}</span><span class="vs">:</span><span class="op">${bstate.os}</span></div>
+     <div class="bt-count" id="btCount">${left}</div>
+   </div>
+   <div class="bt-round">第 ${bstate.i} / ${bstate.total} 題　·　左邊你、右邊對手</div>
+   <div class="qbody"><div class="stem">${q.stem}</div>${opts}
+     <p class="bt-status" id="btOptStatus">選擇你的答案（兩人都答完就立刻進下一題；限時 ${left>0?'':''}30 秒）</p>
+   </div>`;
+}
+function bPick(k){
+  if(!bstate||bstate.picked)return; bstate.picked=k;
+  document.querySelectorAll('#battleScreen .opt').forEach(el=>el.style.pointerEvents='none');
+  const el=document.getElementById('btopt-'+k); if(el)el.classList.add('sel');
+  const st=document.getElementById('btOptStatus'); if(st)st.textContent='已作答，等待對手…';
+  try{bws.send(JSON.stringify({t:'answer',i:bstate.i,selected:k}));}catch(e){}
+}
+function bResult(m){
+  if(bTimer){clearInterval(bTimer);bTimer=null;}
+  bstate.ys=m.you.score; bstate.os=m.opp.score;
+  const sc=document.querySelector('#battleScreen .bt-score'); if(sc)sc.innerHTML=`<span class="me">${m.you.score}</span><span class="vs">:</span><span class="op">${m.opp.score}</span>`;
+  document.querySelectorAll('#battleScreen .opt').forEach(el=>el.style.pointerEvents='none');
+  const cor=document.getElementById('btopt-'+m.correct); if(cor)cor.classList.add('correct');
+  if(m.you.picked&&!m.you.correct){const e=document.getElementById('btopt-'+m.you.picked);if(e)e.classList.add('wrong');}
+  if(m.opp.picked){const e=document.getElementById('btopt-'+m.opp.picked);if(e)e.classList.add('op-pick');}
+  const you=m.you.correct?'✓ 你答對':(m.you.picked?'✗ 你答錯':'✗ 你未作答');
+  const opp=m.opp.picked?(m.opp.correct?'對手答對':'對手答錯'):'對手未作答';
+  const st=document.getElementById('btOptStatus'); if(st)st.innerHTML=`正解 <b>${m.correct}</b>　·　${you}　·　${opp}<br><span style="font-size:11px">（灰框＝對手的選擇）</span>`;
+}
+function bOver(m){
+  if(bTimer){clearInterval(bTimer);bTimer=null;}
+  bstate={phase:'over'};
+  const t=(m.outcome==='win')?'🏆 你贏了！':(m.outcome==='lose')?'😅 對手獲勝':'🤝 平手';
+  const reason=(m.reason==='opp_left')?'（對手離線）':(m.reason==='speed')?'（比分相同，比作答速度）':'';
+  document.getElementById('battleScreen').innerHTML=`
+   <div class="quiz-top"><div class="row" style="justify-content:center"><b style="font-size:15px">對戰結束</b></div></div>
+   <div class="qbody"><div class="card" style="text-align:center">
+     <div class="bt-big">${t}</div>
+     <div style="font-size:42px;font-weight:800;margin:8px 0"><span style="color:var(--brand)">${m.you}</span> <span class="muted" style="font-size:22px">:</span> <span style="color:var(--bad)">${m.opp}</span></div>
+     <p class="muted" style="font-size:13px">你 ${m.you} 分　·　對手 ${m.opp} 分　${reason}</p>
+   </div>
+   <button class="btn primary" style="width:100%;min-height:52px" onclick="renderBattleSetup()">再來一場</button>
+   <div style="height:10px"></div>
+   <button class="btn ghost" style="width:100%;min-height:46px;flex:none" onclick="go('home')">回首頁</button>
+   </div>`;
+  if(bws){try{bws.onclose=null;bws.close();}catch(e){}bws=null;}
+}
+
+
 renderChapters(); renderHome();
 
 </script>
