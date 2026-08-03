@@ -128,6 +128,37 @@ def chapters(x_client_token: str | None = Header(None)):
                 {'chapter_id': r['chapter_id'], 'chapter': r['chapter'], 'count': r['n']})
         return {'units': [{'unit': k, 'chapters': v} for k, v in units.items()]}
 
+@app.get('/api/chapters/progress')
+def chapters_progress(x_client_token: str | None = Header(None)):
+    """各章節：題數、已作答、正確率、完成度（供首頁章節進度與設定頁章節列表使用）。"""
+    with ctx(x_client_token) as (conn, cur, uid):
+        ver = _published_version(cur)
+        cur.execute("""
+          SELECT u.name AS unit, u.sort_order AS us, c.id AS chapter_id, c.name AS chapter, c.sort_order AS cs,
+                 count(q.id) AS total,
+                 count(DISTINCT ua.question_id) AS answered,
+                 count(ua.iid) FILTER (WHERE ua.is_correct) AS correct_items,
+                 count(ua.iid) AS answered_items
+          FROM units u
+          JOIN chapters c ON c.unit_id=u.id
+          JOIN questions q ON q.chapter_id=c.id AND q.status='published' AND q.bank_version_id=%s
+          LEFT JOIN (
+            SELECT it.id AS iid, it.question_id, it.is_correct
+            FROM exam_items it JOIN exam_sessions s ON s.id=it.session_id
+            WHERE s.user_id=%s AND it.selected IS NOT NULL
+          ) ua ON ua.question_id=q.id
+          WHERE u.bank_version_id=%s
+          GROUP BY u.name, u.sort_order, c.id, c.name, c.sort_order
+          ORDER BY u.sort_order, c.sort_order""", (ver, uid, ver))
+        out = []
+        for r in cur.fetchall():
+            ai = r['answered_items'] or 0; ci = r['correct_items'] or 0; tot = r['total'] or 0
+            out.append({'chapter_id': r['chapter_id'], 'chapter': r['chapter'], 'unit': r['unit'],
+                        'total': tot, 'answered': r['answered'] or 0,
+                        'accuracy': round(ci / ai * 100) if ai else None,
+                        'completion': round((r['answered'] or 0) / tot * 100) if tot else 0})
+        return {'chapters': out}
+
 # ---------------- 建立作答場次 ----------------
 class NewSession(BaseModel):
     chapter_ids: list[str] | None = None
@@ -155,6 +186,11 @@ def new_session(body: NewSession, x_client_token: str | None = Header(None)):
         where = "q.bank_version_id=%s AND q.status='published'"
         if body.chapter_ids:
             where += " AND q.chapter_id = ANY(%s::uuid[])"; params.append(body.chapter_ids)
+        if body.mode == 'wrong_review':
+            # 錯題複習：只出「尚未消除」的錯題（可搭配 chapter_ids 做分章複習）
+            where += (" AND q.question_key IN (SELECT question_key FROM wrong_questions"
+                      " WHERE user_id=%s AND resolved=false)")
+            params.append(uid)
         base_order = "random()" if body.shuffle_questions else "q.original_no"
         limit = max(1, min(body.count, 100)); params.append(limit)
         sql = f"""
@@ -221,9 +257,11 @@ def answer(sid: str, body: Answer, x_client_token: str | None = Header(None)):
 @app.post('/api/sessions/{sid}/submit')
 def submit(sid: str, x_client_token: str | None = Header(None)):
     with ctx(x_client_token) as (conn, cur, uid):
-        cur.execute("SELECT id FROM exam_sessions WHERE id=%s AND user_id=%s", (sid, uid))
-        if not cur.fetchone():
+        cur.execute("SELECT mode FROM exam_sessions WHERE id=%s AND user_id=%s", (sid, uid))
+        srow = cur.fetchone()
+        if not srow:
             raise HTTPException(404, '找不到作答場次')
+        smode = srow['mode']
         cur.execute("""
           SELECT it.selected, it.is_correct, q.original_no, q.question_key, c.name AS chapter, q.stem,
                  (SELECT label FROM question_options WHERE question_id=q.id AND is_correct LIMIT 1) AS correct_label
@@ -256,15 +294,69 @@ def submit(sid: str, x_client_token: str | None = Header(None)):
                                  SET wrong_count=wrong_questions.wrong_count+1,
                                      last_wrong_at=now(), last_selected=EXCLUDED.last_selected, resolved=false""",
                             (uid, r['question_key'], BANK_ID, json.dumps(r['selected'])))
+            elif smode == 'wrong_review' and r['selected'] is not None and r['is_correct']:
+                # 錯題複習時答對 → 標記為已消除（從錯題本移除）
+                cur.execute("""UPDATE wrong_questions SET resolved=true, consecutive_correct=consecutive_correct+1
+                               WHERE user_id=%s AND question_key=%s AND resolved=false""",
+                            (uid, r['question_key']))
         conn.commit()
         return {'total': total, 'correct': correct, 'wrong': wrong, 'unanswered': unanswered,
                 'score': score, 'pass': score >= 60, 'per_chapter': per_chapter, 'wrong_list': wrong_list}
+
+@app.get('/api/sessions/latest')
+def latest_session(x_client_token: str | None = Header(None)):
+    """最近一個未完成（in_progress）的作答場次，供首頁「繼續上次練習」。"""
+    with ctx(x_client_token) as (conn, cur, uid):
+        cur.execute("""SELECT s.id, s.mode, s.started_at,
+                              count(it.*) AS total,
+                              count(it.*) FILTER (WHERE it.selected IS NOT NULL) AS answered
+                       FROM exam_sessions s JOIN exam_items it ON it.session_id=s.id
+                       WHERE s.user_id=%s AND s.status='in_progress'
+                       GROUP BY s.id, s.mode, s.started_at
+                       ORDER BY s.started_at DESC LIMIT 1""", (uid,))
+        r = cur.fetchone()
+        if not r:
+            return {'session': None}
+        return {'session': {'session_id': r['id'], 'mode': r['mode'], 'total': r['total'],
+                            'answered': r['answered'],
+                            'started_at': r['started_at'].isoformat() if r['started_at'] else None}}
+
+@app.get('/api/sessions/{sid}')
+def get_session(sid: str, x_client_token: str | None = Header(None)):
+    """讀回整個場次（含已作答內容），供「繼續上次練習」續作。"""
+    with ctx(x_client_token) as (conn, cur, uid):
+        cur.execute("SELECT mode FROM exam_sessions WHERE id=%s AND user_id=%s", (sid, uid))
+        s = cur.fetchone()
+        if not s:
+            raise HTTPException(404, '找不到作答場次')
+        reveal = s['mode'] in ('practice', 'wrong_review', 'read')
+        cur.execute("""
+          SELECT it.id AS item_id, it.selected, it.is_correct, it.order_no,
+                 q.original_no AS no, q.stem, c.name AS chapter,
+                 coalesce(jsonb_agg(jsonb_build_object('label',o.label,'content',o.content)
+                          ORDER BY o.sort_order) FILTER (WHERE o.id IS NOT NULL),'[]') AS options,
+                 (SELECT label FROM question_options WHERE question_id=q.id AND is_correct LIMIT 1) AS correct_label,
+                 e.explanation AS explanation
+          FROM exam_items it JOIN questions q ON q.id=it.question_id JOIN chapters c ON c.id=q.chapter_id
+          LEFT JOIN question_options o ON o.question_id=q.id
+          LEFT JOIN question_explanations e ON e.question_id=q.id
+          WHERE it.session_id=%s
+          GROUP BY it.id, it.selected, it.is_correct, it.order_no, q.id, q.original_no, q.stem, c.name, e.explanation
+          ORDER BY it.order_no""", (sid,))
+        out = []
+        for r in cur.fetchall():
+            item = {'item_id': r['item_id'], 'no': r['no'], 'chapter': r['chapter'], 'stem': r['stem'],
+                    'options': list(r['options']), 'selected': r['selected']}
+            if reveal and r['selected'] is not None:
+                item['correct_label'] = r['correct_label']; item['explanation'] = r['explanation']
+            out.append(item)
+        return {'session_id': sid, 'mode': s['mode'], 'questions': out}
 
 @app.get('/api/wrong')
 def wrong_book(x_client_token: str | None = Header(None)):
     with ctx(x_client_token) as (conn, cur, uid):
         cur.execute("""SELECT DISTINCT ON (w.question_key) w.question_key, w.wrong_count, w.last_wrong_at,
-                              q.stem, c.name AS chapter
+                              w.consecutive_correct, q.stem, c.name AS chapter
                        FROM wrong_questions w
                        JOIN questions q ON q.question_key=w.question_key
                        JOIN chapters c ON c.id=q.chapter_id
@@ -272,7 +364,35 @@ def wrong_book(x_client_token: str | None = Header(None)):
                        ORDER BY w.question_key, q.created_at DESC""", (uid,))
         rows = cur.fetchall()
         rows.sort(key=lambda r: (r['wrong_count'], r['last_wrong_at']), reverse=True)
-        return {'items': rows[:100]}
+        for r in rows:
+            r['last_wrong_at'] = r['last_wrong_at'].isoformat() if r['last_wrong_at'] else None
+        cur.execute("""SELECT
+              count(*) FILTER (WHERE resolved=false) AS total,
+              count(*) FILTER (WHERE resolved=false AND last_wrong_at >= now()-interval '7 days') AS week_wrong,
+              count(*) FILTER (WHERE resolved=true) AS resolved_count
+            FROM wrong_questions WHERE user_id=%s""", (uid,))
+        st = cur.fetchone()
+        return {'items': rows[:200], 'total': st['total'] or 0,
+                'week_wrong': st['week_wrong'] or 0, 'resolved_count': st['resolved_count'] or 0}
+
+@app.get('/api/wrong/chapters')
+def wrong_chapters(x_client_token: str | None = Header(None)):
+    """各章節「尚未消除」的錯題數，供分章錯題複習列表使用。"""
+    with ctx(x_client_token) as (conn, cur, uid):
+        ver = _published_version(cur)
+        cur.execute("""
+          SELECT c.id AS chapter_id, c.name AS chapter, u.name AS unit,
+                 count(DISTINCT w.question_key) AS n
+          FROM wrong_questions w
+          JOIN questions q ON q.question_key=w.question_key
+                          AND q.bank_version_id=%s AND q.status='published'
+          JOIN chapters c ON c.id=q.chapter_id
+          JOIN units u ON u.id=c.unit_id
+          WHERE w.user_id=%s AND w.resolved=false
+          GROUP BY c.id, c.name, u.name, u.sort_order, c.sort_order
+          ORDER BY u.sort_order, c.sort_order""", (ver, uid))
+        rows = cur.fetchall()
+        return {'chapters': rows, 'total': sum(r['n'] for r in rows)}
 
 @app.get('/api/stats')
 def stats(x_client_token: str | None = Header(None)):
