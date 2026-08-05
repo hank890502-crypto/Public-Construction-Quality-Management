@@ -101,6 +101,15 @@ def index():
 def admin_page():
     return FileResponse(WEB_DIR / 'admin.html')
 
+@app.get('/media/{fname}')
+def media(fname: str):
+    """靜態媒體（對戰背景音樂等），存放於 web/media/。"""
+    root = (WEB_DIR / 'media').resolve()
+    p = (root / fname).resolve()
+    if root not in p.parents or not p.is_file():
+        raise HTTPException(404, '找不到檔案')
+    return FileResponse(p)
+
 @app.get('/api/health')
 def health():
     conn = db(); cur = conn.cursor()

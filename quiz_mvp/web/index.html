@@ -1118,11 +1118,12 @@ function _actx(){ try{ if(!_ac) _ac=new (window.AudioContext||window.webkitAudio
 function _tone(freq,t0,dur,vol,type){ const ac=_ac; if(!ac) return; const o=ac.createOscillator(),g=ac.createGain(); o.type=type||'sine'; o.frequency.value=freq; g.gain.setValueAtTime(0.0001,t0); g.gain.linearRampToValueAtTime(vol,t0+0.015); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur); o.connect(g); g.connect(ac.destination); o.start(t0); o.stop(t0+dur+0.03); }
 function sfxCorrect(){ if(_muted) return; const ac=_actx(); if(!ac) return; const t=ac.currentTime; _tone(660,t,0.12,0.2,'triangle'); _tone(880,t+0.10,0.16,0.2,'triangle'); _tone(1320,t+0.22,0.22,0.13,'sine'); }
 function sfxWrong(){ if(_muted) return; const ac=_actx(); if(!ac) return; const t=ac.currentTime; _tone(233,t,0.22,0.17,'sawtooth'); _tone(155,t+0.13,0.3,0.15,'sawtooth'); }
-const _BGM=[392,494,587,494,440,587,659,587];
-function bgmStart(){ bgmStop(); if(_muted) return; const ac=_actx(); if(!ac) return; _bgmStep=0;
-  const tick=()=>{ if(_muted||!_ac) return; const t=_ac.currentTime; const f=_BGM[_bgmStep%_BGM.length]; _tone(f,t,0.5,0.045,'sine'); _tone(f/2,t,0.6,0.03,'sine'); _bgmStep++; };
-  tick(); _bgmTimer=setInterval(tick,480); }
-function bgmStop(){ if(_bgmTimer){ clearInterval(_bgmTimer); _bgmTimer=null; } }
+const BGM_URL='/media/The_Final_Tally.mp3';
+let _bgmAudio=null;
+function _bgm(){ if(!_bgmAudio){ try{ _bgmAudio=new Audio(BGM_URL); _bgmAudio.loop=true; _bgmAudio.preload='auto'; _bgmAudio.volume=0.4; }catch(e){} } return _bgmAudio; }
+function bgmPrime(){ const a=_bgm(); if(!a) return; try{ a.muted=true; const p=a.play(); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }  /* 手勢中靜音預播，讓 iOS 之後能出聲 */
+function bgmStart(){ if(_muted) return; const a=_bgm(); if(!a) return; try{ a.muted=false; if(a.paused){ const p=a.play(); if(p&&p.catch) p.catch(()=>{}); } }catch(e){} }
+function bgmStop(){ if(_bgmAudio){ try{ _bgmAudio.pause(); _bgmAudio.currentTime=0; }catch(e){} } }
 function btMuteBtn(){ return '<button id="btMute" class="qt-icon" onclick="toggleBattleMute()" title="音效開關" style="width:36px;height:36px">'+ic(_muted?'volumeX':'volume2',20)+'</button>'; }
 function toggleBattleMute(){ _muted=!_muted; lsSet('battle_muted',_muted?'1':'0'); if(_muted) bgmStop(); else if(bstate&&bstate.phase==='play') bgmStart(); const b=document.getElementById('btMute'); if(b) b.innerHTML=ic(_muted?'volumeX':'volume2',20); }
 
@@ -1192,7 +1193,7 @@ function battleStart(){
   const hello={t:'hello',mode:bMode,token:clientToken(),name:'玩家',count:bCount};
   if(bMode!=='join' && bChap.size) hello.chapter_ids=[...bChap];
   if(bMode==='join'){const code=(document.getElementById('btCode').value||'').trim().toUpperCase();if(!code){toast('請輸入房碼');return;}hello.code=code;}
-  _actx();  /* 使用者手勢中解鎖音訊 */
+  _actx(); bgmPrime();  /* 使用者手勢中解鎖音訊（含背景音樂）*/
   battleWaiting('連線中…');
   try{ bws=new WebSocket(wsURL()); }catch(e){ battleWaiting('無法連線：'+e.message,true); return; }
   bws.onopen=()=>{try{bws.send(JSON.stringify(hello));}catch(e){}};
