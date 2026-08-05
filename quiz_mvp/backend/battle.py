@@ -10,7 +10,7 @@
 對戰狀態存在記憶體（單一實例；免費方案 1 個 instance 沒問題）。不需資料表。
 可用環境變數調整：BATTLE_ROUND_SECS（預設30）、BATTLE_REVEAL_SECS（預設2.5）。
 """
-import os, asyncio, secrets
+import os, asyncio, secrets, random
 import psycopg2, psycopg2.extras
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -18,6 +18,9 @@ BANK_ID = '00000000-0000-0000-0000-0000000000b1'
 ROUND_SECS  = float(os.environ.get('BATTLE_ROUND_SECS', '30'))
 REVEAL_SECS = float(os.environ.get('BATTLE_REVEAL_SECS', '2.5'))
 MINQ, MAXQ, DEFQ = 3, 50, 10
+# 快速配對找不到真人時，等待逾時後派一位電腦對手加入（對外偽裝成一般玩家）
+BOT_WAIT_SECS = float(os.environ.get('BATTLE_BOT_WAIT_SECS', '15'))
+BOTS_ENABLED  = os.environ.get('BATTLE_BOTS', '1') not in ('0', 'false', 'False', '')
 
 router = APIRouter()
 
@@ -101,6 +104,81 @@ _rooms = {}   # code -> 等待中的房主 Conn
 
 def _new_code():
     return 'PK-' + ''.join(secrets.choice('ABCDEFGHJKLMNPQRSTUVWXYZ23456789') for _ in range(4))
+
+# ---------------- 電腦對手（快速配對備援；對外偽裝成一般玩家，不顯示為機器人）----------------
+_BOT_NAMES = ['阿哲','小明','建豪','家瑋','怡君','昱翔','宗翰','品妍','阿凱','大雄','Kevin','Ryan','Wei',
+              '阿翔','阿宏','俊傑','雅婷','子涵','世傑','阿德','浩宇','宇軒','冠廷','思妤','柏翰','阿良']
+def _bot_name():
+    return random.choice(_BOT_NAMES)
+
+class BotConn:
+    """假裝成玩家的電腦對手：攔截 round 訊息，延遲一段擬真時間後把答案放進自己的 inbox。
+    介面與 Conn 相容（send/finish/inbox/alive/score/total_ms/done），run_match 無須特別處理。"""
+    def __init__(self, name, questions):
+        self.ws = None
+        self.token = ''
+        self.name = name
+        self.inbox = asyncio.Queue()
+        self.alive = True
+        self.score = 0
+        self.total_ms = 0
+        self.qcount = len(questions)
+        self.qchapters = None
+        self.done = asyncio.get_running_loop().create_future()
+        self.is_bot = True
+        self._q = questions
+        self._acc = random.uniform(0.55, 0.82)     # 本場實力（答對機率），每場不同
+        self._fast = random.uniform(0.7, 1.25)      # 速度係數
+    async def send(self, obj):
+        if not self.alive:
+            return
+        if isinstance(obj, dict) and obj.get('t') == 'round':
+            asyncio.ensure_future(self._think(obj.get('i'), obj.get('secs', int(ROUND_SECS))))
+    def finish(self):
+        if not self.done.done():
+            self.done.set_result(True)
+    async def _think(self, i, secs):
+        if random.random() < 0.04:          # 偶爾放空一題（逾時），像真人分心
+            return
+        delay = min(max(1.6, random.uniform(2.5, 11.0) * self._fast), max(1.6, secs - 1.5))
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            return
+        if not self.alive:
+            return
+        q = self._q[i - 1] if isinstance(i, int) and 0 < i <= len(self._q) else None
+        if not q:
+            return
+        correct = q.get('correct')
+        opts = [o.get('label') for o in (q.get('options') or []) if o.get('label')]
+        if correct and random.random() < self._acc:
+            sel = correct
+        else:
+            wrong = [o for o in opts if o != correct]
+            sel = random.choice(wrong) if wrong else correct
+        try:
+            self.inbox.put_nowait({'t': 'answer', 'i': i, 'selected': sel})
+        except Exception:
+            pass
+
+async def _bot_fallback(c):
+    """快速配對等待逾時仍無真人 → 取出等待者並派電腦對手開賽。"""
+    try:
+        await asyncio.sleep(BOT_WAIT_SECS + random.uniform(0, 6))
+    except asyncio.CancelledError:
+        return
+    async with _lock:
+        if c not in _quick or not c.alive or c.done.done():
+            return
+        _quick.remove(c)
+    qs = await _questions(c.qcount, c.qchapters)
+    if not qs:
+        async with _lock:
+            if c.alive and not c.done.done():
+                _quick.append(c)
+        return
+    asyncio.ensure_future(run_match(c, BotConn(_bot_name(), qs), qs, c.qchapters))
 
 # ---------------- 一場對戰 ----------------
 async def run_match(a, b, questions, chapters=None):
@@ -255,6 +333,8 @@ async def battle_ws(ws: WebSocket):
                 await c.done
             else:
                 await c.send({'t': 'waiting', 'mode': 'quick'})
+                if BOTS_ENABLED:
+                    asyncio.ensure_future(_bot_fallback(c))
                 await c.done
     except WebSocketDisconnect:
         c.alive = False

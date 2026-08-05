@@ -651,7 +651,9 @@ const ICONS={
   zap:'<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
   clipboard:'<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h6"/>',
   search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
-  bell:'<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M21 15.4a10 10 0 0 1-1.9-1.5 3 3 0 0 1-.6-1.8V9a6 6 0 0 0-12 0v3.1c0 .7-.2 1.3-.6 1.8A10 10 0 0 1 3 15.4"/>'
+  bell:'<path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><path d="M21 15.4a10 10 0 0 1-1.9-1.5 3 3 0 0 1-.6-1.8V9a6 6 0 0 0-12 0v3.1c0 .7-.2 1.3-.6 1.8A10 10 0 0 1 3 15.4"/>',
+  volume2:'<path d="M11 4.7 6.5 8H3v8h3.5L11 19.3z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
+  volumeX:'<path d="M11 4.7 6.5 8H3v8h3.5L11 19.3z"/><path d="m22 9-6 6"/><path d="m16 9 6 6"/>'
 };
 function ic(n,s){ s=s||22; return '<svg class="ic-svg" width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(ICONS[n]||'')+'</svg>'; }
 function paintIcons(root){ (root||document).querySelectorAll('[data-ic]').forEach(el=>{ el.innerHTML=ic(el.dataset.ic, el.dataset.icSize?+el.dataset.icSize:22); }); }
@@ -1110,7 +1112,21 @@ let _rz; window.addEventListener('resize', ()=>{ clearTimeout(_rz); _rz=setTimeo
 /* ===== 好友對戰 PK（WebSocket）===== */
 let bws=null, bstate=null, bTimer=null, bMode='create', bCount=10;
 function wsURL(){return (location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/battle';}
-function battleLeave(){ if(bTimer){clearInterval(bTimer);bTimer=null;} if(bws){try{bws.onclose=null;bws.close();}catch(e){} bws=null;} bstate=null; }
+/* ===== 對戰音效與背景音樂（Web Audio 合成，無需外部音檔）===== */
+let _ac=null, _bgmTimer=null, _bgmStep=0, _muted=(lsGet('battle_muted','0')==='1');
+function _actx(){ try{ if(!_ac) _ac=new (window.AudioContext||window.webkitAudioContext)(); if(_ac.state==='suspended') _ac.resume(); }catch(e){} return _ac; }
+function _tone(freq,t0,dur,vol,type){ const ac=_ac; if(!ac) return; const o=ac.createOscillator(),g=ac.createGain(); o.type=type||'sine'; o.frequency.value=freq; g.gain.setValueAtTime(0.0001,t0); g.gain.linearRampToValueAtTime(vol,t0+0.015); g.gain.exponentialRampToValueAtTime(0.0001,t0+dur); o.connect(g); g.connect(ac.destination); o.start(t0); o.stop(t0+dur+0.03); }
+function sfxCorrect(){ if(_muted) return; const ac=_actx(); if(!ac) return; const t=ac.currentTime; _tone(660,t,0.12,0.2,'triangle'); _tone(880,t+0.10,0.16,0.2,'triangle'); _tone(1320,t+0.22,0.22,0.13,'sine'); }
+function sfxWrong(){ if(_muted) return; const ac=_actx(); if(!ac) return; const t=ac.currentTime; _tone(233,t,0.22,0.17,'sawtooth'); _tone(155,t+0.13,0.3,0.15,'sawtooth'); }
+const _BGM=[392,494,587,494,440,587,659,587];
+function bgmStart(){ bgmStop(); if(_muted) return; const ac=_actx(); if(!ac) return; _bgmStep=0;
+  const tick=()=>{ if(_muted||!_ac) return; const t=_ac.currentTime; const f=_BGM[_bgmStep%_BGM.length]; _tone(f,t,0.5,0.045,'sine'); _tone(f/2,t,0.6,0.03,'sine'); _bgmStep++; };
+  tick(); _bgmTimer=setInterval(tick,480); }
+function bgmStop(){ if(_bgmTimer){ clearInterval(_bgmTimer); _bgmTimer=null; } }
+function btMuteBtn(){ return '<button id="btMute" class="qt-icon" onclick="toggleBattleMute()" title="音效開關" style="width:36px;height:36px">'+ic(_muted?'volumeX':'volume2',20)+'</button>'; }
+function toggleBattleMute(){ _muted=!_muted; lsSet('battle_muted',_muted?'1':'0'); if(_muted) bgmStop(); else if(bstate&&bstate.phase==='play') bgmStart(); const b=document.getElementById('btMute'); if(b) b.innerHTML=ic(_muted?'volumeX':'volume2',20); }
+
+function battleLeave(){ bgmStop(); if(bTimer){clearInterval(bTimer);bTimer=null;} if(bws){try{bws.onclose=null;bws.close();}catch(e){} bws=null;} bstate=null; }
 function btBack(){ battleLeave(); }
 const BT_TOP='<div class="quiz-top"><div class="row" style="justify-content:space-between"><button onclick="go(\'home\')" style="border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:10px;padding:8px 14px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:5px">'+ic('x',15)+'離開</button><b style="font-size:15px">好友對戰 PK</b><span style="width:52px"></span></div></div>';
 
@@ -1176,6 +1192,7 @@ function battleStart(){
   const hello={t:'hello',mode:bMode,token:clientToken(),name:'玩家',count:bCount};
   if(bMode!=='join' && bChap.size) hello.chapter_ids=[...bChap];
   if(bMode==='join'){const code=(document.getElementById('btCode').value||'').trim().toUpperCase();if(!code){toast('請輸入房碼');return;}hello.code=code;}
+  _actx();  /* 使用者手勢中解鎖音訊 */
   battleWaiting('連線中…');
   try{ bws=new WebSocket(wsURL()); }catch(e){ battleWaiting('無法連線：'+e.message,true); return; }
   bws.onopen=()=>{try{bws.send(JSON.stringify(hello));}catch(e){}};
@@ -1196,7 +1213,7 @@ function onBattleMsg(m){
     b.innerHTML=(m.mode==='create')?`<p class="bt-status">把房碼給朋友加入：</p><div class="bt-code">${m.code}</div><p class="bt-status">等待對手加入中…</p>`:`<p class="bt-status">快速配對中…<br>等待另一位玩家加入</p>`;
     return;
   }
-  if(m.t==='start'){bstate={phase:'play',ys:0,os:0,total:m.total,scope:m.scope||''};return;}
+  if(m.t==='start'){bstate={phase:'play',ys:0,os:0,total:m.total,scope:m.scope||''};bgmStart();return;}
   if(m.t==='round'){bRound(m);return;}
   if(m.t==='locked'){const s=document.getElementById('btOptStatus');if(s)s.textContent='已作答，等待對手…';return;}
   if(m.t==='result'){bResult(m);return;}
@@ -1215,6 +1232,7 @@ function renderBattlePlay(deadline){
   const opts=(q.options||[]).map(o=>`<button class="opt" id="btopt-${o.label}" onclick="bPick('${o.label}')"><span class="lb">${o.label}</span><span>${o.content}</span></button>`).join('');
   document.getElementById('battleScreen').innerHTML=`
    <div class="bt-head">
+     ${btMuteBtn()}
      <div class="bt-name">你</div>
      <div class="bt-score"><span class="me">${bstate.ys}</span><span class="vs">:</span><span class="op">${bstate.os}</span></div>
      <div class="bt-count" id="btCount">${left}</div>
@@ -1234,6 +1252,7 @@ function bPick(k){
 }
 function bResult(m){
   if(bTimer){clearInterval(bTimer);bTimer=null;}
+  if(m.you.correct) sfxCorrect(); else if(m.you.picked) sfxWrong();
   bstate.ys=m.you.score; bstate.os=m.opp.score;
   const sc=document.querySelector('#battleScreen .bt-score'); if(sc)sc.innerHTML=`<span class="me">${m.you.score}</span><span class="vs">:</span><span class="op">${m.opp.score}</span>`;
   document.querySelectorAll('#battleScreen .opt').forEach(el=>el.style.pointerEvents='none');
@@ -1246,6 +1265,7 @@ function bResult(m){
 }
 function bOver(m){
   if(bTimer){clearInterval(bTimer);bTimer=null;}
+  bgmStop(); if(m.outcome==='win') sfxCorrect(); else if(m.outcome==='lose') sfxWrong();
   bstate={phase:'over'};
   const t=(m.outcome==='win')?'🏆 你贏了！':(m.outcome==='lose')?'😅 對手獲勝':'🤝 平手';
   const reason=(m.reason==='opp_left')?'（對手離線）':(m.reason==='speed')?'（比分相同，比作答速度）':'';
